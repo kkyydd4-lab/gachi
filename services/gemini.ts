@@ -9,7 +9,7 @@ if (!apiKey) {
 const genAI = new GoogleGenerativeAI(apiKey || "");
 
 // Default model configuration
-const DEFAULT_MODEL = "gemini-3.0-pro";
+const DEFAULT_MODEL = "gemini-3-flash-preview";
 
 export interface GenerationOptions {
     model?: string;

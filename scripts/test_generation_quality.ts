@@ -106,7 +106,7 @@ ${getDifficultyInstructions(difficulty, grade)}
 
     try {
         const response = await ai.models.generateContent({
-            model: 'gemini-3.0-pro',
+            model: 'gemini-3-flash-preview',
             contents: [{ parts: [{ text: prompt }] }],
             config: { responseMimeType: 'application/json' }
         });

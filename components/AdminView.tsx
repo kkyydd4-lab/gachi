@@ -221,7 +221,7 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
     setIsAiProcessing(true);
     try {
       const msg = `당신은 교육공학 프롬프트 엔지니어입니다. 다음 프롬프트를 사용자의 요청에 맞춰 수정하세요.\n\n[프롬프트]\n${currentPromptText}\n\n[요청]\n${aiEditRequest}`;
-      const res = await ai.models.generateContent({ model: 'gemini-3.0-pro', contents: [{ parts: [{ text: msg }] }] });
+      const res = await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: [{ parts: [{ text: msg }] }] });
       setCurrentPromptText(res.text || currentPromptText);
       setAiEditRequest('');
     } catch (e) { alert('AI 수정 오류'); } finally { setIsAiProcessing(false); }

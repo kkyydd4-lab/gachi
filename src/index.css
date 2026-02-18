@@ -1,0 +1,25 @@
+@import "tailwindcss";
+@config "../tailwind.config.js";
+
+@layer base {
+    body {
+        @apply bg-background-light text-navy font-display overflow-x-hidden m-0;
+    }
+}
+
+@layer utilities {
+    .custom-scrollbar::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+        background: #2CC9C2;
+        border-radius: 10px;
+    }
+
+    .logo-shadow {
+        filter: drop-shadow(0 20px 30px rgba(0, 43, 91, 0.1));
+    }
+}
+
+/* Float Animation previously in index.html <style> is now handled by tailwind.config.js theme extension */

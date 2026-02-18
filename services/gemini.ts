@@ -8,8 +8,10 @@ if (!apiKey) {
 
 const genAI = new GoogleGenerativeAI(apiKey || "");
 
-// Default model configuration
+// Model configuration with fallback
 const DEFAULT_MODEL = "gemini-3-flash-preview";
+const FALLBACK_MODEL = "gemini-2.5-flash";
+const MAX_RETRIES = 2;
 
 export interface GenerationOptions {
     model?: string;
@@ -18,66 +20,103 @@ export interface GenerationOptions {
     topK?: number;
     maxOutputTokens?: number;
     responseMimeType?: string;
-    responseSchema?: any; // google-generative-ai uses a specific Schema type but 'any' offers flexibility with strict runtime checks
+    responseSchema?: any;
 }
 
 // Re-export strict types for consumers
 export { SchemaType as Type };
-export type Schema = any; // Schema type in @google/generative-ai is complex, simplifying for now or mapping it
+export type Schema = any;
 
 /**
- * Generates content using Google Gemini model with standardized error handling and typing.
- * @param prompt The prompt to send to the model.
- * @param options Configuration options for the generation.
- * @returns The generated response, parsed as JSON if a schema is provided or strict JSON is requested.
+ * Delay helper for exponential backoff
+ */
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
+ * Generates content using Google Gemini model with retry, fallback, and error handling.
  */
 export async function generateContent<T = any>(
     prompt: string,
     options: GenerationOptions = {}
 ): Promise<T> {
-    try {
-        const modelId = options.model || DEFAULT_MODEL;
+    const modelsToTry = [
+        options.model || DEFAULT_MODEL,
+        FALLBACK_MODEL
+    ];
 
-        // Configure the inference parameters
-        const generationConfig: GenerationConfig = {
-            temperature: options.temperature ?? 0.7,
-            topP: options.topP ?? 0.95,
-            topK: options.topK ?? 40,
-            maxOutputTokens: options.maxOutputTokens ?? 8192,
-        };
+    // Configure the inference parameters
+    const generationConfig: GenerationConfig = {
+        temperature: options.temperature ?? 0.7,
+        topP: options.topP ?? 0.95,
+        topK: options.topK ?? 40,
+        maxOutputTokens: options.maxOutputTokens ?? 8192,
+    };
 
-        if (options.responseMimeType) {
-            generationConfig.responseMimeType = options.responseMimeType;
-        }
+    if (options.responseMimeType) {
+        generationConfig.responseMimeType = options.responseMimeType;
+    }
 
-        if (options.responseSchema) {
-            generationConfig.responseMimeType = "application/json";
-            generationConfig.responseSchema = options.responseSchema;
-        }
+    if (options.responseSchema) {
+        generationConfig.responseMimeType = "application/json";
+        generationConfig.responseSchema = options.responseSchema;
+    }
 
-        const model = genAI.getGenerativeModel({
-            model: modelId,
-            generationConfig,
-        });
+    let lastError: any = null;
 
-        const result = await model.generateContent(prompt);
-        const response = result.response;
-        const text = response.text();
-
-        if (generationConfig.responseMimeType === "application/json") {
+    for (const modelId of modelsToTry) {
+        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
             try {
-                // Simple clean up for common markdown code block wrappers
-                const cleanedText = text.replace(/```json/g, '').replace(/```/g, '').trim();
-                return JSON.parse(cleanedText) as T;
-            } catch (e) {
-                console.error("Failed to parse JSON response:", text);
-                throw new Error("AI returned malformed JSON.");
+                if (attempt > 0) {
+                    const waitTime = Math.pow(2, attempt) * 1000; // 2s, 4s
+                    console.log(`⏳ Retry ${attempt}/${MAX_RETRIES} for ${modelId} (waiting ${waitTime}ms)...`);
+                    await delay(waitTime);
+                }
+
+                const model = genAI.getGenerativeModel({
+                    model: modelId,
+                    generationConfig,
+                });
+
+                const result = await model.generateContent(prompt);
+                const response = result.response;
+                const text = response.text();
+
+                if (modelId !== (options.model || DEFAULT_MODEL)) {
+                    console.log(`✅ Fallback to ${modelId} succeeded`);
+                }
+
+                if (generationConfig.responseMimeType === "application/json") {
+                    try {
+                        const cleanedText = text.replace(/```json/g, '').replace(/```/g, '').trim();
+                        return JSON.parse(cleanedText) as T;
+                    } catch (e) {
+                        console.error("Failed to parse JSON response:", text);
+                        throw new Error("AI returned malformed JSON.");
+                    }
+                }
+
+                return text as unknown as T;
+            } catch (error: any) {
+                lastError = error;
+                const errorMsg = error?.message || '';
+                const is503 = errorMsg.includes('503') || errorMsg.includes('high demand') || errorMsg.includes('overloaded');
+                const is429 = errorMsg.includes('429') || errorMsg.includes('rate limit') || errorMsg.includes('quota');
+
+                if (is503 || is429) {
+                    console.warn(`⚠️ ${modelId} returned ${is503 ? '503' : '429'} (attempt ${attempt + 1}/${MAX_RETRIES + 1})`);
+                    if (attempt < MAX_RETRIES) continue; // retry same model
+                    console.warn(`🔄 Switching to fallback model...`);
+                    break; // try next model
+                }
+
+                // Non-retryable error
+                console.error(`❌ ${modelId} error:`, error);
+                break; // try fallback model
             }
         }
-
-        return text as unknown as T;
-    } catch (error) {
-        console.error("Gemini Generation Error:", error);
-        throw error;
     }
+
+    console.error("Gemini Generation Error: All models failed", lastError);
+    throw lastError;
 }
+

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { checkFirebaseConnection } from '../../services/firebase';
+import { generateContent } from '../../services/gemini';
 
 interface SettingsModalProps {
     onClose: () => void;
@@ -7,21 +8,63 @@ interface SettingsModalProps {
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     const [firebaseStatus, setFirebaseStatus] = useState<'checking' | 'connected' | 'error'>('checking');
+    const [geminiStatus, setGeminiStatus] = useState<'checking' | 'connected' | 'error'>('checking');
 
     useEffect(() => {
-        const check = async () => {
+        const checkAll = async () => {
             setFirebaseStatus('checking');
-            const ok = await checkFirebaseConnection();
-            setFirebaseStatus(ok ? 'connected' : 'error');
+            const fbOk = await checkFirebaseConnection();
+            setFirebaseStatus(fbOk ? 'connected' : 'error');
+
+            setGeminiStatus('checking');
+            try {
+                await generateContent('테스트', { maxOutputTokens: 32 });
+                setGeminiStatus('connected');
+            } catch {
+                setGeminiStatus('error');
+            }
         };
-        check();
+        checkAll();
     }, []);
 
-    const handleRetry = async () => {
+    const handleRetryFirebase = async () => {
         setFirebaseStatus('checking');
         const ok = await checkFirebaseConnection();
         setFirebaseStatus(ok ? 'connected' : 'error');
     };
+
+    const handleRetryGemini = async () => {
+        setGeminiStatus('checking');
+        try {
+            await generateContent('테스트', { maxOutputTokens: 32 });
+            setGeminiStatus('connected');
+        } catch {
+            setGeminiStatus('error');
+        }
+    };
+
+    const StatusBadge = ({ status }: { status: 'checking' | 'connected' | 'error' }) => (
+        <div className="ml-auto flex items-center gap-2">
+            {status === 'checking' && (
+                <>
+                    <span className="material-symbols-outlined animate-spin text-gray-400 text-sm">sync</span>
+                    <span className="text-xs text-gray-400 font-bold">확인 중...</span>
+                </>
+            )}
+            {status === 'connected' && (
+                <>
+                    <span className="w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse" />
+                    <span className="text-xs text-green-600 font-bold">연결됨</span>
+                </>
+            )}
+            {status === 'error' && (
+                <>
+                    <span className="w-2.5 h-2.5 bg-red-500 rounded-full" />
+                    <span className="text-xs text-red-600 font-bold">연결 실패</span>
+                </>
+            )}
+        </div>
+    );
 
     return (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
@@ -44,35 +87,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                             <div className="flex items-center gap-3 mb-3">
                                 <span className="material-symbols-outlined text-orange-500">local_fire_department</span>
                                 <span className="text-navy font-bold">Firebase</span>
-                                <div className="ml-auto flex items-center gap-2">
-                                    {firebaseStatus === 'checking' && (
-                                        <>
-                                            <span className="material-symbols-outlined animate-spin text-gray-400 text-sm">sync</span>
-                                            <span className="text-xs text-gray-400 font-bold">확인 중...</span>
-                                        </>
-                                    )}
-                                    {firebaseStatus === 'connected' && (
-                                        <>
-                                            <span className="w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse" />
-                                            <span className="text-xs text-green-600 font-bold">연결됨</span>
-                                        </>
-                                    )}
-                                    {firebaseStatus === 'error' && (
-                                        <>
-                                            <span className="w-2.5 h-2.5 bg-red-500 rounded-full" />
-                                            <span className="text-xs text-red-600 font-bold">연결 실패</span>
-                                        </>
-                                    )}
-                                </div>
+                                <StatusBadge status={firebaseStatus} />
                             </div>
                             <p className="text-xs text-gray-500 leading-relaxed">
                                 🔥 Firebase가 기본으로 연결되어 있습니다. 별도 설정 없이 인증, 데이터 저장, 분석 기능을 사용할 수 있습니다.
                             </p>
                             {firebaseStatus === 'error' && (
-                                <button
-                                    onClick={handleRetry}
-                                    className="mt-3 text-xs text-primary font-bold underline hover:no-underline"
-                                >
+                                <button onClick={handleRetryFirebase} className="mt-3 text-xs text-primary font-bold underline hover:no-underline">
                                     다시 확인
                                 </button>
                             )}
@@ -86,11 +107,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                             <div className="flex items-center gap-3 mb-2">
                                 <span className="material-symbols-outlined text-blue-500">smart_toy</span>
                                 <span className="text-navy font-bold">Gemini 3.0 Flash</span>
-                                <span className="ml-auto bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[10px] font-bold">Preview</span>
+                                <StatusBadge status={geminiStatus} />
                             </div>
                             <p className="text-xs text-gray-500 leading-relaxed">
-                                문항 생성에 사용되는 AI 모델입니다. Fallback: Gemini 2.5 Flash
+                                🤖 문항 생성에 사용되는 AI 모델입니다. Fallback: Gemini 2.5 Flash
                             </p>
+                            {geminiStatus === 'error' && (
+                                <button onClick={handleRetryGemini} className="mt-3 text-xs text-primary font-bold underline hover:no-underline">
+                                    다시 확인
+                                </button>
+                            )}
                         </div>
                     </div>
 

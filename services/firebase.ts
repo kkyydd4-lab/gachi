@@ -39,7 +39,7 @@ export const db = getFirestore(app);
  */
 export const checkFirebaseConnection = async (): Promise<boolean> => {
   try {
-    await getDoc(doc(db, '__health__', 'ping'));
+    await getDoc(doc(db, '_health_check', 'ping'));
     return true;
   } catch (error: any) {
     // permission-denied는 연결은 성공했지만 권한이 없는 경우 (= 연결 OK)

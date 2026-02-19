@@ -139,7 +139,7 @@ const QuestionSeedGenerator: React.FC<QuestionSeedGeneratorProps> = ({ onComplet
     };
 
     // Hook
-    const { generatePassageWithQuestions, isLoading: isHookLoading, error: hookError } = useContentGenerator();
+    const { generatePassage, generateQuestions, isLoading: isHookLoading, error: hookError } = useContentGenerator();
 
     // Use local isGenerating for batch process management, but sync error
     // Actually we can just use local state for the loop and call hook methods which are stateless (mostly)
@@ -203,9 +203,7 @@ const QuestionSeedGenerator: React.FC<QuestionSeedGeneratorProps> = ({ onComplet
         });
 
         try {
-            // --- 🚀 통합 호출 + 병렬 배치 처리 ---
-            // 기존: 주제당 2회 호출 (지문 + 문항) = 8회
-            // 개선: 주제당 1회 통합 호출 = 4회 (50% 감소)
+            // --- 병렬 배치 처리 (2개씩 동시 생성) ---
             const BATCH_SIZE = 2;
             let completedCount = 0;
 
@@ -214,20 +212,59 @@ const QuestionSeedGenerator: React.FC<QuestionSeedGeneratorProps> = ({ onComplet
                 const passageCategories = distributedCounts[index];
                 if (!passageCategories || Object.keys(passageCategories).length === 0) return null;
 
-                // 🚀 통합 호출: 지문 + 문항을 1번에 생성
-                const result = await generatePassageWithQuestions(
-                    subject,
-                    selectedGrade,
-                    passageCategories,
-                    {
-                        length: config.charCount,
-                        difficulty: config.difficulty,
-                        style: config.style,
-                    }
-                );
+                // Step 1: Generate Passage
+                const writerPrompt = `
+          [Specific Topic]
+          Topic: ${subject}
+          
+          [Configuration]
+          - Difficulty: ${config.difficulty || 'Normal'}
+          - Type: Reading Comprehension Test Passage
+          
+          [Requirements]
+          - Length: ${config.charCount}
+          - Style: ${config.style}
+          - Language: Korean only
+          - Content: Educational, engaging, clear structure
+        `;
 
-                if (!result || !result.questions || result.questions.length === 0) {
-                    console.error(`Generation failed for topic: ${subject}`);
+                const passageResult = await generatePassage(subject, selectedGrade, {
+                    length: config.charCount,
+                    difficulty: config.difficulty,
+                    additionalPrompt: writerPrompt
+                });
+
+                if (!passageResult) {
+                    console.error(`Passage generation failed for topic: ${subject}`);
+                    return null;
+                }
+
+                // Step 2: Generate Questions
+                const passageQuestionCount = Object.values(passageCategories).reduce((a, b) => a + b, 0);
+                const questionDistribution = Object.entries(passageCategories)
+                    .map(([cat, count]) => `- ${cat}: ${count} questions`)
+                    .join('\n');
+
+                const examinerPrompt = `
+          [Blueprint]
+          Create exactly ${passageQuestionCount} questions following this distribution:
+          ${questionDistribution}
+          
+          [Rules]
+          - Each question MUST have exactly 5 options (5지선다형)
+          - Only 1 correct answer per question (Index 1 to 5)
+          - Questions should naturally derive from the passage content.
+          - Evaluate the specific capability (Vocabulary, Factual, Inference, etc.) accurately.
+          - Do NOT force arbitrary difficulty levels. Make questions natural and appropriate for the grade.
+          - Language: Korean only
+        `;
+
+                const questionResult = await generateQuestions(passageResult.content, passageQuestionCount, selectedGrade, {
+                    instructions: examinerPrompt
+                });
+
+                if (!questionResult || !questionResult.questions) {
+                    console.error(`Question generation failed for topic: ${subject}`);
                     return null;
                 }
 
@@ -235,10 +272,10 @@ const QuestionSeedGenerator: React.FC<QuestionSeedGeneratorProps> = ({ onComplet
                     assetId: crypto.randomUUID(),
                     gradeGroup: selectedGrade,
                     subject: subject,
-                    title: result.title,
-                    content: result.content,
+                    title: passageResult.title,
+                    content: questionResult.modified_content || passageResult.content,
                     difficulty: (config.difficulty as any) || '중',
-                    questions: (result.questions || []).map((q: any) => ({
+                    questions: (questionResult.questions || []).map((q: any) => ({
                         ...q,
                         id: typeof q.id === 'number' ? q.id : (Number(q.id) || Math.floor(Math.random() * 10000)),
                         options: (q.options || []).map((opt: string) =>

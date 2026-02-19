@@ -20,19 +20,9 @@ export interface UseContentGeneratorReturn {
         grade: string,
         options?: {
             instructions?: string;
-            responseSchema?: Schema;
+            responseSchema?: Schema; // Allow overriding schema for advanced types
         }
-    ) => Promise<QuestionGenerationResult | null>;
-    generatePassageWithQuestions: (
-        topic: string,
-        grade: string,
-        questionDistribution: Record<string, number>,
-        options?: {
-            length?: string;
-            difficulty?: string;
-            style?: string;
-        }
-    ) => Promise<CombinedGenerationResult | null>;
+    ) => Promise<QuestionGenerationResult | null>; // Changed return type
 }
 
 interface ContentGenerationResult {
@@ -43,15 +33,7 @@ interface ContentGenerationResult {
 }
 
 export interface QuestionGenerationResult {
-    modified_content?: string;
-    questions: Question[];
-}
-
-export interface CombinedGenerationResult {
-    title: string;
-    content: string;
-    summary: string;
-    keywords: string[];
+    modified_content?: string; // For questions that modify text (blanks, underlines)
     questions: Question[];
 }
 
@@ -76,9 +58,9 @@ const DEFAULT_QUESTION_SCHEMA: Schema = {
             items: {
                 type: Type.OBJECT,
                 properties: {
-                    id: { type: Type.INTEGER },
+                    id: { type: Type.INTEGER }, // Changed to INTEGER to match Question interface
                     category: { type: Type.STRING },
-                    type: { type: Type.STRING },
+                    type: { type: Type.STRING }, // Added type
                     question: { type: Type.STRING },
                     options: { type: Type.ARRAY, items: { type: Type.STRING }, minItems: 5, maxItems: 5 },
                     answer: { type: Type.INTEGER },
@@ -89,33 +71,6 @@ const DEFAULT_QUESTION_SCHEMA: Schema = {
         },
     },
     required: ["questions"],
-};
-
-const COMBINED_SCHEMA: Schema = {
-    type: Type.OBJECT,
-    properties: {
-        title: { type: Type.STRING },
-        content: { type: Type.STRING },
-        summary: { type: Type.STRING },
-        keywords: { type: Type.ARRAY, items: { type: Type.STRING } },
-        questions: {
-            type: Type.ARRAY,
-            items: {
-                type: Type.OBJECT,
-                properties: {
-                    id: { type: Type.INTEGER },
-                    category: { type: Type.STRING },
-                    type: { type: Type.STRING },
-                    question: { type: Type.STRING },
-                    options: { type: Type.ARRAY, items: { type: Type.STRING }, minItems: 5, maxItems: 5 },
-                    answer: { type: Type.INTEGER },
-                    rationale: { type: Type.STRING },
-                },
-                required: ["question", "options", "answer", "category"],
-            },
-        },
-    },
-    required: ["title", "content", "summary", "keywords", "questions"],
 };
 
 const getComplexityGuidelines = (grade: string): string => {
@@ -132,6 +87,7 @@ const getComplexityGuidelines = (grade: string): string => {
         - Tone: Informative and objective.
         `;
     } else {
+        // High school / General
         return `
         - Sentence Structure: Complex sentences with varied structure.
         - Vocabulary: Academic and abstract concepts.
@@ -207,6 +163,7 @@ export const useContentGenerator = () => {
         setIsLoading(true);
         setError(null);
         try {
+            // If instructions are provided, use them heavily.
             const prompt = options.instructions ? `
         ${options.instructions}
         
@@ -264,88 +221,10 @@ export const useContentGenerator = () => {
         }
     }, []);
 
-    /**
-     * 🚀 통합 생성: 지문 + 문항을 1회 API 호출로 동시 생성
-     * - 기존: 2회 호출 (지문 1회 + 문항 1회) → 통합: 1회 호출
-     * - 4주제 기준: 8회 → 4회 호출로 50% 속도 향상
-     */
-    const generatePassageWithQuestions = useCallback(async (
-        topic: string,
-        grade: string,
-        questionDistribution: Record<string, number>,
-        options: { length?: string; difficulty?: string; style?: string } = {}
-    ): Promise<CombinedGenerationResult | null> => {
-        setIsLoading(true);
-        setError(null);
-        try {
-            const complexityGuides = getComplexityGuidelines(grade);
-            const totalQuestions = Object.values(questionDistribution).reduce((a, b) => a + b, 0);
-            const distributionText = Object.entries(questionDistribution)
-                .filter(([_, count]) => count > 0)
-                .map(([cat, count]) => `- ${cat}: ${count}문항`)
-                .join('\n');
-
-            const prompt = `역할: 당신은 20년 경력의 한국어 문해력 평가 전문 콘텐츠 제작자입니다.
-
-과제: "${topic}" 주제로 읽기 지문을 작성하고, 해당 지문에 대한 ${totalQuestions}개의 5지선다형 문항을 함께 출제하세요.
-
-[대상]
-- 학년: ${grade}
-${complexityGuides}
-
-[지문 작성 규칙]
-- 길이: ${options.length || '학년에 적합한 길이'}
-- 난이도: ${options.difficulty || '중'}
-- 문체: ${options.style || '학년에 적합한 문체'}
-- 구조: 서론-본론-결론이 명확한 글
-- 언어: 한국어만 사용
-
-[문항 출제 규칙]
-1. 반드시 선택지 5개 (정답 1개, 오답 4개)
-2. 오답은 그럴듯하지만 틀린 선택지로 구성
-3. 아래 역량 배분을 정확히 따르세요:
-${distributionText}
-
-4. category 필드에는 반드시 다음 중 하나만 사용:
-   '어휘력' | '사실적 이해' | '추론적 이해' | '구조적 이해' | '비판적 이해'
-
-[JSON 출력 형식]
-{
-  "title": "지문 제목",
-  "content": "지문 본문 전체",
-  "summary": "지문 요약 (1-2문장)",
-  "keywords": ["핵심단어1", "핵심단어2", "핵심단어3"],
-  "questions": [
-    {
-      "id": 1,
-      "category": "역량명",
-      "question": "문항 텍스트",
-      "options": ["선택지1", "선택지2", "선택지3", "선택지4", "선택지5"],
-      "answer": 1,
-      "rationale": "정답/오답 설명"
-    }
-  ]
-}`;
-
-            const result = await generateContent<CombinedGenerationResult>(prompt, {
-                responseSchema: COMBINED_SCHEMA,
-            });
-
-            return result;
-        } catch (err: any) {
-            setError(err.message || 'Failed to generate content');
-            return null;
-        } finally {
-            setIsLoading(false);
-        }
-    }, []);
-
     return {
         isLoading,
         error,
         generatePassage,
-        generateQuestions,
-        generatePassageWithQuestions
+        generateQuestions
     };
 };
-

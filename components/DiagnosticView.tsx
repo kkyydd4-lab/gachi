@@ -3,7 +3,7 @@ import { generateContent } from '../services/gemini';
 import { UserAccount, DiagnosticPassage, AdminConfig, GradeGroupType, Asset, TestSession, QuestionLog, AgentStatus, BlueprintDebugInfo, WrongAnswerRecord, LearningSession } from '../types';
 import { AssetService, ConfigService, CurriculumService, LearningSessionService } from '../services/api';
 import * as Analytics from '../services/analytics';
-import { QuickFeedback } from './MicroSurvey';
+import { QuickFeedback, FeedbackButtons } from './MicroSurvey';
 
 // Sub-components
 import DiagnosticLoading from './diagnostic/DiagnosticLoading';
@@ -264,7 +264,7 @@ const DiagnosticView: React.FC<DiagnosticViewProps> = ({ user, onComplete, onCan
             difficulty: asset.difficulty,
             questions: asset.questions.map(q => ({ ...q, id: globalQId++ }))
           };
-          (p as any).assetId = asset.assetId;
+          (p as any).assetId = asset.assetId; // This casting is for adding assetId to DiagnosticPassage type
           return p;
         });
 
@@ -475,8 +475,11 @@ const DiagnosticView: React.FC<DiagnosticViewProps> = ({ user, onComplete, onCan
       {showQuickFeedback && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center animate-fade-in px-6">
           <div className="bg-white rounded-[2rem] p-6 w-full max-w-sm">
-            <h4 className="text-center font-bold text-navy mb-4">방금 푼 문제, 어땠나요?</h4>
-            <QuickFeedback type="mid-test" onFeedback={handleQuickFeedback} />
+            <FeedbackButtons
+              onSelect={(difficulty) => {
+                handleQuickFeedback(difficulty);
+              }}
+            />
           </div>
         </div>
       )}

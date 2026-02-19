@@ -1,4 +1,4 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -46,7 +46,7 @@ if (!API_KEY) {
     process.exit(1);
 }
 
-const ai = new GoogleGenAI({ apiKey: API_KEY });
+const genAI = new GoogleGenerativeAI(API_KEY);
 
 // --- Types & Constants (Copied from GenerateTab.tsx for standalone execution) ---
 type GradeGroupType = '초등 저학년' | '초등 중학년' | '초등 고학년' | '중등';
@@ -105,30 +105,32 @@ ${getDifficultyInstructions(difficulty, grade)}
 반드시 JSON 형식으로 응답하세요: {"title": "제목", "content": "지문 내용"}`;
 
     try {
-        const response = await ai.models.generateContent({
+        const model = genAI.getGenerativeModel({
             model: 'gemini-3-flash-preview',
-            contents: [{ parts: [{ text: prompt }] }],
-            config: { responseMimeType: 'application/json' }
+            generationConfig: { responseMimeType: 'application/json' }
         });
+
+        const result = await model.generateContent(prompt);
+        const response = result.response;
 
         // Debug: Log raw response keys
         // console.log("Response Keys:", Object.keys(response || {}));
 
-        const text = response.text || "{}";
-        let result;
+        const text = response.text() || "{}";
+        let jsonResult;
         try {
-            result = JSON.parse(sanitizeJSON(text));
+            jsonResult = JSON.parse(sanitizeJSON(text));
         } catch (e) {
             console.error("⚠️ JSON Parse Error. Raw text:", text);
             return;
         }
 
         // Handle array response (Gemini sometimes returns an array)
-        if (Array.isArray(result)) {
-            result = result[0];
+        if (Array.isArray(jsonResult)) {
+            jsonResult = jsonResult[0];
         }
 
-        const content = result.content || "";
+        const content = jsonResult.content || "";
 
         console.log(`📄 Generated Length: ${content.length} chars`);
 

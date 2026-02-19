@@ -52,26 +52,7 @@ export const QuickFeedback: React.FC<QuickFeedbackProps> = ({
                 <p className="text-center text-navy font-bold text-sm mb-4">
                     이 문제는 어땠나요?
                 </p>
-                <div className="flex justify-center gap-3">
-                    {[
-                        { value: 1 as const, emoji: '😊', label: '쉬움' },
-                        { value: 2 as const, emoji: '🙂', label: '' },
-                        { value: 3 as const, emoji: '😐', label: '보통' },
-                        { value: 4 as const, emoji: '😓', label: '' },
-                        { value: 5 as const, emoji: '😰', label: '어려움' },
-                    ].map((item) => (
-                        <button
-                            key={item.value}
-                            onClick={() => handleSelect(item.value)}
-                            className="flex flex-col items-center p-2 rounded-xl hover:bg-gray-50 active:scale-95 transition-all"
-                        >
-                            <span className="text-3xl mb-1">{item.emoji}</span>
-                            {item.label && (
-                                <span className="text-[10px] text-gray-400 font-bold">{item.label}</span>
-                            )}
-                        </button>
-                    ))}
-                </div>
+                <FeedbackButtons onSelect={handleSelect} />
                 <button
                     onClick={onClose}
                     className="w-full mt-4 text-gray-300 text-xs font-bold hover:text-gray-500 transition-colors"
@@ -144,8 +125,8 @@ export const PostTestSurveyForm: React.FC<PostTestSurveyProps> = ({
                                     key={v}
                                     onClick={() => setDifficulty(v)}
                                     className={`w-10 h-10 rounded-full font-bold text-sm transition-all ${difficulty === v
-                                            ? 'bg-primary text-white shadow-lg scale-110'
-                                            : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+                                        ? 'bg-primary text-white shadow-lg scale-110'
+                                        : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
                                         }`}
                                 >
                                     {v}
@@ -163,8 +144,8 @@ export const PostTestSurveyForm: React.FC<PostTestSurveyProps> = ({
                         <button
                             onClick={() => setExplanationClear(true)}
                             className={`flex-1 py-4 rounded-xl font-bold transition-all ${explanationClear === true
-                                    ? 'bg-primary text-white shadow-lg'
-                                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                                ? 'bg-primary text-white shadow-lg'
+                                : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                                 }`}
                         >
                             네, 이해됐어요 👍
@@ -172,8 +153,8 @@ export const PostTestSurveyForm: React.FC<PostTestSurveyProps> = ({
                         <button
                             onClick={() => setExplanationClear(false)}
                             className={`flex-1 py-4 rounded-xl font-bold transition-all ${explanationClear === false
-                                    ? 'bg-secondary text-white shadow-lg'
-                                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                                ? 'bg-secondary text-white shadow-lg'
+                                : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                                 }`}
                         >
                             조금 어려웠어요 🤔
@@ -192,8 +173,8 @@ export const PostTestSurveyForm: React.FC<PostTestSurveyProps> = ({
                                     key={v}
                                     onClick={() => setRecommend(v)}
                                     className={`w-10 h-10 rounded-full font-bold text-sm transition-all ${recommend === v
-                                            ? 'bg-navy text-white shadow-lg scale-110'
-                                            : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+                                        ? 'bg-navy text-white shadow-lg scale-110'
+                                        : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
                                         }`}
                                 >
                                     {v}
@@ -232,8 +213,8 @@ export const PostTestSurveyForm: React.FC<PostTestSurveyProps> = ({
                     onClick={handleSubmit}
                     disabled={!canSubmit || isSubmitting}
                     className={`flex-1 py-4 rounded-2xl font-black text-lg transition-all flex items-center justify-center gap-2 ${canSubmit && !isSubmitting
-                            ? 'bg-primary text-white shadow-xl shadow-primary/30 hover:brightness-105 active:scale-[0.98]'
-                            : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                        ? 'bg-primary text-white shadow-xl shadow-primary/30 hover:brightness-105 active:scale-[0.98]'
+                        : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                         }`}
                 >
                     {isSubmitting ? (
@@ -262,7 +243,35 @@ export const PostTestSurveyForm: React.FC<PostTestSurveyProps> = ({
 // }
 // .animate-slide-up { animation: slideUp 0.3s ease-out; }
 
+export const FeedbackButtons: React.FC<{
+    onSelect: (difficulty: 1 | 2 | 3 | 4 | 5) => void;
+}> = ({ onSelect }) => {
+    return (
+        <div className="flex justify-center gap-3">
+            {[
+                { value: 1 as const, emoji: '😊', label: '쉬움' },
+                { value: 2 as const, emoji: '🙂', label: '' },
+                { value: 3 as const, emoji: '😐', label: '보통' },
+                { value: 4 as const, emoji: '😓', label: '' },
+                { value: 5 as const, emoji: '😰', label: '어려움' },
+            ].map((item) => (
+                <button
+                    key={item.value}
+                    onClick={() => onSelect(item.value)}
+                    className="flex flex-col items-center p-2 rounded-xl hover:bg-gray-50 active:scale-95 transition-all"
+                >
+                    <span className="text-3xl mb-1">{item.emoji}</span>
+                    {item.label && (
+                        <span className="text-[10px] text-gray-400 font-bold">{item.label}</span>
+                    )}
+                </button>
+            ))}
+        </div>
+    );
+};
+
 export default {
     QuickFeedback,
-    PostTestSurveyForm
+    PostTestSurveyForm,
+    FeedbackButtons
 };

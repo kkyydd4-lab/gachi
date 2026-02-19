@@ -16,6 +16,7 @@ const SignupView: React.FC<SignupViewProps> = ({ onBack }) => {
     school: '',
     grade: '',
     phone: '',
+    parentPhone: '',
     role: 'STUDENT',
     academyId: ''
   });

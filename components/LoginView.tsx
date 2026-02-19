@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { UserAccount } from '../types';
 import { AuthService } from '../services/api';
+import { Button, Input } from '@/components/ui';
 
 interface LoginViewProps {
   onLogin: (user: UserAccount) => void;
@@ -112,40 +113,33 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, onGoSignup }) => {
               </div>
             )}
 
-            <div className="relative group">
-              <span className="absolute left-5 top-5 text-gray-400 group-focus-within:text-primary transition-colors">
-                <span className="material-symbols-outlined">person</span>
-              </span>
-              <input
-                className="w-full rounded-[1.5rem] border-gray-100 bg-white h-16 pl-14 pr-6 text-lg focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none transition-all border font-medium"
-                placeholder="아이디"
-                value={userId}
-                onChange={(e) => setUserId(e.target.value)}
-                onKeyDown={handleKeyDown}
-              />
-            </div>
+            <Input
+              placeholder="아이디"
+              value={userId}
+              onChange={(e) => setUserId(e.target.value)}
+              onKeyDown={handleKeyDown}
+              icon="person"
+            />
 
-            <div className="relative group">
-              <span className="absolute left-5 top-5 text-gray-400 group-focus-within:text-primary transition-colors">
-                <span className="material-symbols-outlined">lock</span>
-              </span>
-              <input
-                className="w-full rounded-[1.5rem] border-gray-100 bg-white h-16 pl-14 pr-6 text-lg focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none transition-all border font-medium"
-                placeholder="비밀번호"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onKeyDown={handleKeyDown}
-              />
-            </div>
+            <Input
+              placeholder="비밀번호"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={handleKeyDown}
+              icon="lock"
+            />
 
-            <button
+            <Button
+              variant="primary" // 기본값이지만 명시
+              size="lg" // h-16에 해당 (Button.tsx 수정 필요할 수도 있음, 현재 lg는 py-4)
+              fullWidth
               onClick={handleSignIn}
-              disabled={isLoading}
-              className="w-full bg-navy text-white font-black h-16 rounded-[1.5rem] text-xl transition-all shadow-xl shadow-navy/20 hover:bg-[#001e40] active:scale-[0.98] mt-4 flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+              isLoading={isLoading}
+              className="mt-4 h-16 text-xl bg-navy hover:bg-[#001e40] shadow-navy/20" // 커스텀 스타일 오버라이드
             >
-              {isLoading ? <span className="material-symbols-outlined animate-spin">refresh</span> : '로그인'}
-            </button>
+              로그인
+            </Button>
 
             <div className="relative py-6 lg:py-8 flex items-center">
               <div className="flex-grow border-t border-gray-200"></div>
@@ -153,12 +147,15 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, onGoSignup }) => {
               <div className="flex-grow border-t border-gray-200"></div>
             </div>
 
-            <button
+            <Button
+              variant="primary"
+              size="lg"
+              fullWidth
               onClick={onGoSignup}
-              className="w-full bg-primary text-white font-black h-16 rounded-[1.5rem] text-xl transition-all shadow-xl shadow-primary/20 hover:brightness-105 active:scale-[0.98]"
+              className="h-16 text-xl shadow-primary/20"
             >
               문해력 진단 및 회원가입
-            </button>
+            </Button>
           </div>
 
 

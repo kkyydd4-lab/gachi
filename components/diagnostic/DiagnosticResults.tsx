@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { PostTestSurvey, TestResult, UserAccount } from '../../types';
 import * as Analytics from '../../services/analytics';
-import { QuickFeedback } from '../MicroSurvey';
+import { QuickFeedback, FeedbackButtons } from '../MicroSurvey';
 import ReportView from '../ReportView';
 
 interface DiagnosticResultsProps {
@@ -40,9 +40,16 @@ const DiagnosticResults: React.FC<DiagnosticResultsProps> = ({ result, user, onH
                     <h3 className="text-lg font-black text-navy mb-4 text-center">
                         잠깐! 이번 진단 어떠셨나요?
                     </h3>
-                    <QuickFeedback
-                        type="post-test"
-                        onFeedback={(data) => handleSurveySubmit(data as PostTestSurvey)}
+                    <FeedbackButtons
+                        onSelect={(difficulty) => {
+                            // Map single difficulty score to PostTestSurvey structure
+                            handleSurveySubmit({
+                                overallDifficulty: difficulty,
+                                wasExplanationClear: true, // Default or implicit
+                                wouldRecommend: 3, // Default
+                                needsGuidance: false
+                            });
+                        }}
                     />
                 </div>
 

@@ -85,11 +85,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                         <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
                             <div className="flex items-center gap-3 mb-2">
                                 <span className="material-symbols-outlined text-blue-500">smart_toy</span>
-                                <span className="text-navy font-bold">Gemini 2.5 Flash</span>
-                                <span className="ml-auto bg-green-100 text-green-700 px-2 py-0.5 rounded text-[10px] font-bold">GA 안정 모델</span>
+                                <span className="text-navy font-bold">Gemini 3.0 Flash</span>
+                                <span className="ml-auto bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[10px] font-bold">Preview</span>
                             </div>
                             <p className="text-xs text-gray-500 leading-relaxed">
-                                문항 생성에 사용되는 AI 모델입니다. Fallback: Gemini 2.5 Pro
+                                문항 생성에 사용되는 AI 모델입니다. Fallback: Gemini 2.5 Flash
                             </p>
                         </div>
                     </div>

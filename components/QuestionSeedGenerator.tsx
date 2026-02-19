@@ -203,19 +203,16 @@ const QuestionSeedGenerator: React.FC<QuestionSeedGeneratorProps> = ({ onComplet
         });
 
         try {
-            for (let i = 0; i < totalToGenerate; i++) {
-                const subject = targetTopics[i];
-                const passageCategories = distributedCounts[i];
-                if (!passageCategories || Object.keys(passageCategories).length === 0) continue;
+            // --- 병렬 배치 처리 (2개씩 동시 생성) ---
+            const BATCH_SIZE = 2;
+            let completedCount = 0;
 
-                setProgress(Math.round(((i + 0.1) / totalToGenerate) * 100));
-
-                /* -----------------------------------------------------------
-                   AI Generation Logic (Using Hook)
-                   ----------------------------------------------------------- */
+            const generateSingleAsset = async (index: number): Promise<Asset | null> => {
+                const subject = targetTopics[index];
+                const passageCategories = distributedCounts[index];
+                if (!passageCategories || Object.keys(passageCategories).length === 0) return null;
 
                 // Step 1: Generate Passage
-                // Hook handles Role/Task. We provide specifics.
                 const writerPrompt = `
           [Specific Topic]
           Topic: ${subject}
@@ -238,11 +235,9 @@ const QuestionSeedGenerator: React.FC<QuestionSeedGeneratorProps> = ({ onComplet
                 });
 
                 if (!passageResult) {
-                    console.error('Passage generation failed');
-                    continue;
+                    console.error(`Passage generation failed for topic: ${subject}`);
+                    return null;
                 }
-
-                setProgress(Math.round(((i + 0.5) / totalToGenerate) * 100));
 
                 // Step 2: Generate Questions
                 const passageQuestionCount = Object.values(passageCategories).reduce((a, b) => a + b, 0);
@@ -269,8 +264,8 @@ const QuestionSeedGenerator: React.FC<QuestionSeedGeneratorProps> = ({ onComplet
                 });
 
                 if (!questionResult || !questionResult.questions) {
-                    console.error('Question generation failed');
-                    continue;
+                    console.error(`Question generation failed for topic: ${subject}`);
+                    return null;
                 }
 
                 const newAsset: Asset = {
@@ -282,7 +277,6 @@ const QuestionSeedGenerator: React.FC<QuestionSeedGeneratorProps> = ({ onComplet
                     difficulty: (config.difficulty as any) || '중',
                     questions: (questionResult.questions || []).map((q: any) => ({
                         ...q,
-                        // Fix ID and Option format
                         id: typeof q.id === 'number' ? q.id : (Number(q.id) || Math.floor(Math.random() * 10000)),
                         options: (q.options || []).map((opt: string) =>
                             opt.replace(/^[①-⑮0-9.\s]+/, '').trim()
@@ -294,9 +288,35 @@ const QuestionSeedGenerator: React.FC<QuestionSeedGeneratorProps> = ({ onComplet
                 };
 
                 await AssetService.createAsset(newAsset);
-                newAssets.push(newAsset);
-                setGeneratedCount(prev => prev + 1);
-                setProgress(Math.round(((i + 1) / totalToGenerate) * 100));
+
+                // Update progress
+                completedCount++;
+                setGeneratedCount(completedCount);
+                setProgress(Math.round((completedCount / totalToGenerate) * 100));
+
+                return newAsset;
+            };
+
+            // Process in batches of BATCH_SIZE (2 at a time)
+            for (let batch = 0; batch < totalToGenerate; batch += BATCH_SIZE) {
+                const batchIndices = [];
+                for (let i = batch; i < Math.min(batch + BATCH_SIZE, totalToGenerate); i++) {
+                    batchIndices.push(i);
+                }
+
+                setProgress(Math.round((batch / totalToGenerate) * 100));
+
+                const results = await Promise.allSettled(
+                    batchIndices.map(idx => generateSingleAsset(idx))
+                );
+
+                for (const result of results) {
+                    if (result.status === 'fulfilled' && result.value) {
+                        newAssets.push(result.value);
+                    } else if (result.status === 'rejected') {
+                        console.error('Batch item failed:', result.reason);
+                    }
+                }
             }
 
             // --- Create LearningSession (Batch 4 as 1 Session) ---

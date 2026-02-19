@@ -1,11 +1,10 @@
 // Firebase 초기화 파일
 import { initializeApp } from "firebase/app";
-import { getAuth, connectAuthEmulator } from "firebase/auth";
-import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
-import { getAnalytics } from "firebase/analytics";
+import { getAuth } from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
+import { getAnalytics, Analytics } from "firebase/analytics";
 
 // Firebase 설정
-// User Provided Config
 const firebaseConfig = {
   apiKey: "AIzaSyCvY9CZyCQ7_xPALJRwncoSYWAuK2rVkNw",
   authDomain: "gachiic.firebaseapp.com",
@@ -18,17 +17,39 @@ const firebaseConfig = {
 
 // Firebase 앱 초기화
 const app = initializeApp(firebaseConfig);
-export const analytics = getAnalytics(app);
+
+// Analytics 초기화 (광고 차단기 등으로 실패할 수 있으므로 방어적 처리)
+let analytics: Analytics | null = null;
+try {
+  if (typeof window !== 'undefined') {
+    analytics = getAnalytics(app);
+  }
+} catch (e) {
+  console.warn('[Firebase] Analytics 초기화 실패 (광고 차단기 등):', e);
+}
+export { analytics };
 
 // Firebase 서비스 인스턴스
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 
-// 개발 환경에서 에뮬레이터 사용 (선택사항)
-// 에뮬레이터를 사용하려면 아래 주석을 해제하세요
-// if (import.meta.env.DEV) {
-//   connectAuthEmulator(auth, "http://localhost:9099");
-//   connectFirestoreEmulator(db, "localhost", 8080);
-// }
+/**
+ * Firebase 연결 상태 확인 헬퍼
+ * - Firestore에 간단한 읽기를 시도하여 연결 상태를 확인
+ */
+export const checkFirebaseConnection = async (): Promise<boolean> => {
+  try {
+    const { doc, getDoc } = await import('firebase/firestore');
+    await getDoc(doc(db, '__health__', 'ping'));
+    return true;
+  } catch (error: any) {
+    // permission-denied는 연결은 성공했지만 권한이 없는 경우 (= 연결 OK)
+    if (error?.code === 'permission-denied') {
+      return true;
+    }
+    console.error('[Firebase] 연결 확인 실패:', error);
+    return false;
+  }
+};
 
 export default app;

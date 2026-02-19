@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { GoogleGenAI } from "@google/genai";
 import { AdminConfig, UserAccount, GradeGroupType, Asset, Academy } from '../types';
 import { AssetService, ConfigService, AuthService, CloudService, AcademyService, CurriculumService } from '../services/api';
-import { DriveClient } from '../services/googleDrive';
+import { generateContent } from '../services/gemini';
 import { useConfig, useUsers, useAssets, useAcademies, useUpdateAssetStatus, useUpdateAsset, useDeleteUser, useUpdateUser, useCreateAcademy, useSaveConfig, useLearningSessions, useUpdateLearningSessionStatus, useDeleteLearningSession } from '../hooks/useQueries';
 import AdminAnalytics from './AdminAnalytics';
 
@@ -20,7 +19,7 @@ interface AdminViewProps {
   onBack: () => void;
 }
 
-const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
+// Gemini AI는 services/gemini.ts를 통해 사용
 
 // 등급별 세부 출제 아키텍처
 const GRADE_ARCHITECTURES: Record<GradeGroupType, Record<string, number>> = {
@@ -112,8 +111,6 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
   useEffect(() => {
     setIsDriveConnected(CloudService.isConnected());
     setCloudProvider(CloudService.getProviderType());
-    setInputClientId(DriveClient.getClientId());
-    setInputApiKey(DriveClient.getApiKey());
   }, []);
 
   const handleDeleteUser = async (user: UserAccount) => {
@@ -161,10 +158,8 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
   };
 
   const handleSaveSettings = () => {
-    if (inputClientId && inputApiKey) DriveClient.setCredentials(inputClientId, inputApiKey);
     CloudService.setProvider(cloudProvider);
-    alert('설정이 저장되었습니다. 페이지를 새로고침하여 적용해주세요.');
-    window.location.reload();
+    alert('설정이 저장되었습니다.');
   };
 
   const getDefaultPrompt = (grade: GradeGroupType) => {
@@ -221,8 +216,8 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
     setIsAiProcessing(true);
     try {
       const msg = `당신은 교육공학 프롬프트 엔지니어입니다. 다음 프롬프트를 사용자의 요청에 맞춰 수정하세요.\n\n[프롬프트]\n${currentPromptText}\n\n[요청]\n${aiEditRequest}`;
-      const res = await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: [{ parts: [{ text: msg }] }] });
-      setCurrentPromptText(res.text || currentPromptText);
+      const result = await generateContent(msg);
+      setCurrentPromptText(result || currentPromptText);
       setAiEditRequest('');
     } catch (e) { alert('AI 수정 오류'); } finally { setIsAiProcessing(false); }
   };
@@ -290,13 +285,6 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
       {showSettingsModal && (
         <SettingsModal
           onClose={() => setShowSettingsModal(false)}
-          cloudProvider={cloudProvider}
-          setCloudProvider={setCloudProvider}
-          inputClientId={inputClientId}
-          setInputClientId={setInputClientId}
-          inputApiKey={inputApiKey}
-          setInputApiKey={setInputApiKey}
-          handleSaveSettings={handleSaveSettings}
         />
       )}
 

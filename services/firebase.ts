@@ -1,7 +1,7 @@
 // Firebase 초기화 파일
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { getFirestore, doc, getDoc } from "firebase/firestore";
 import { getAnalytics, Analytics } from "firebase/analytics";
 
 // Firebase 설정
@@ -39,7 +39,6 @@ export const db = getFirestore(app);
  */
 export const checkFirebaseConnection = async (): Promise<boolean> => {
   try {
-    const { doc, getDoc } = await import('firebase/firestore');
     await getDoc(doc(db, '__health__', 'ping'));
     return true;
   } catch (error: any) {

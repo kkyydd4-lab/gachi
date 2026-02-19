@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { GoogleGenAI, Type } from "@google/genai";
+import { generateContent } from '../services/gemini';
 import { UserAccount, DiagnosticPassage, AdminConfig, GradeGroupType, Asset, TestSession, QuestionLog, AgentStatus, BlueprintDebugInfo, WrongAnswerRecord, LearningSession } from '../types';
 import { AssetService, ConfigService, CurriculumService, LearningSessionService } from '../services/api';
 import * as Analytics from '../services/analytics';
@@ -65,8 +65,7 @@ const GRADE_SUBJECTS: Record<GradeGroupType, string[]> = {
   ]
 };
 
-// TODO: 프로덕션에서는 환경 변수 사용 권장 (VITE_GEMINI_API_KEY)
-const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
+// Gemini AI는 services/gemini.ts를 통해 사용
 
 const DiagnosticView: React.FC<DiagnosticViewProps> = ({ user, onComplete, onCancel }) => {
   const [loading, setLoading] = useState(true);
@@ -324,12 +323,10 @@ const DiagnosticView: React.FC<DiagnosticViewProps> = ({ user, onComplete, onCan
     "description": "구체적인 활동 설명 (기간, 방법, 기대효과 포함)"
   }
 }`;
-      const result = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: [{ parts: [{ text: prompt }] }],
-        config: { responseMimeType: "application/json" }
+      const result = await generateContent(prompt, {
+        responseMimeType: "application/json"
       });
-      return JSON.parse(result.text || '{}');
+      return result;
     } catch (e) { return null; }
   };
 

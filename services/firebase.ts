@@ -39,11 +39,16 @@ export const db = getFirestore(app);
  */
 export const checkFirebaseConnection = async (): Promise<boolean> => {
   try {
-    await getDoc(doc(db, '_health_check', 'ping'));
+    // 실제 사용 중인 컬렉션에서 읽기 시도
+    const { getDocs, collection, query, limit } = await import('firebase/firestore');
+    const q = query(collection(db, 'users'), limit(1));
+    await getDocs(q);
     return true;
   } catch (error: any) {
-    // permission-denied는 연결은 성공했지만 권한이 없는 경우 (= 연결 OK)
-    if (error?.code === 'permission-denied') {
+    const code = error?.code || '';
+    // 서버에서 응답이 온 에러들 = 연결 자체는 성공
+    if (code === 'permission-denied' || code === 'unauthenticated' ||
+      code === 'not-found' || code.includes('PERMISSION')) {
       return true;
     }
     console.error('[Firebase] 연결 확인 실패:', error);

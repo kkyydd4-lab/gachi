@@ -9,8 +9,8 @@ if (!apiKey) {
 const genAI = new GoogleGenerativeAI(apiKey || "");
 
 // Model configuration with fallback
-const DEFAULT_MODEL = "gemini-2.5-flash";
-const FALLBACK_MODEL = "gemini-2.5-pro";
+const DEFAULT_MODEL = "gemini-3-flash";
+const FALLBACK_MODEL = "gemini-3-pro";
 const MAX_RETRIES = 2;
 
 export interface GenerationOptions {

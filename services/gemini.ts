@@ -9,8 +9,8 @@ if (!apiKey) {
 const genAI = new GoogleGenerativeAI(apiKey || "");
 
 // Model configuration with fallback
-const DEFAULT_MODEL = "gemini-2.5-flash";
-const FALLBACK_MODEL = "gemini-2.5-pro";
+const DEFAULT_MODEL = "gemini-3-flash-preview";
+const FALLBACK_MODEL = "gemini-2.5-flash";
 const MAX_RETRIES = 2;
 
 export interface GenerationOptions {
@@ -26,6 +26,44 @@ export interface GenerationOptions {
 // Re-export strict types for consumers
 export { SchemaType as Type };
 export type Schema = any;
+
+/**
+ * 잘린 JSON 응답을 복구하는 헬퍼
+ * - 닫히지 않은 문자열, 배열, 객체를 닫아줌
+ */
+function repairTruncatedJson(text: string): string {
+    let cleaned = text.replace(/```json/g, '').replace(/```/g, '').trim();
+
+    // 잘린 문자열 닫기: 마지막에 열린 따옴표가 있으면 닫기
+    const quoteCount = (cleaned.match(/(?<!\\)"/g) || []).length;
+    if (quoteCount % 2 !== 0) {
+        cleaned += '"';
+    }
+
+    // 누락된 괄호 세기
+    let braces = 0, brackets = 0;
+    let inString = false;
+    for (let i = 0; i < cleaned.length; i++) {
+        const ch = cleaned[i];
+        if (ch === '"' && (i === 0 || cleaned[i - 1] !== '\\')) inString = !inString;
+        if (inString) continue;
+        if (ch === '{') braces++;
+        if (ch === '}') braces--;
+        if (ch === '[') brackets++;
+        if (ch === ']') brackets--;
+    }
+
+    // 마지막에 잘린 키-값 쌍 정리 (예: ,"key": 로 끝남)
+    cleaned = cleaned.replace(/,\s*"[^"]*"?\s*:?\s*$/, '');
+    // 잘린 값 정리 (예: "value 로 끝남)
+    cleaned = cleaned.replace(/,\s*$/, '');
+
+    // 괄호 균형 맞추기
+    for (let i = 0; i < brackets; i++) cleaned += ']';
+    for (let i = 0; i < braces; i++) cleaned += '}';
+
+    return cleaned;
+}
 
 /**
  * Delay helper for exponential backoff
@@ -49,7 +87,7 @@ export async function generateContent<T = any>(
         temperature: options.temperature ?? 0.7,
         topP: options.topP ?? 0.95,
         topK: options.topK ?? 40,
-        maxOutputTokens: options.maxOutputTokens ?? 8192,
+        maxOutputTokens: options.maxOutputTokens ?? 65536,
     };
 
     if (options.responseMimeType) {
@@ -90,8 +128,15 @@ export async function generateContent<T = any>(
                         const cleanedText = text.replace(/```json/g, '').replace(/```/g, '').trim();
                         return JSON.parse(cleanedText) as T;
                     } catch (e) {
-                        console.error("Failed to parse JSON response:", text);
-                        throw new Error("AI returned malformed JSON.");
+                        // 잘린 JSON 복구 시도
+                        try {
+                            const repaired = repairTruncatedJson(text);
+                            console.warn('⚠️ Repaired truncated JSON response');
+                            return JSON.parse(repaired) as T;
+                        } catch (e2) {
+                            console.error("Failed to parse JSON response:", text.substring(0, 200) + '...');
+                            throw new Error("AI returned malformed JSON.");
+                        }
                     }
                 }
 

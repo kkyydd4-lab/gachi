@@ -24,6 +24,11 @@ const DiagnosticTest: React.FC<DiagnosticTestProps> = ({
     const [mobileTab, setMobileTab] = useState<'passage' | 'questions'>('passage');
     const [highlightedSentence, setHighlightedSentence] = useState<string | null>(null);
 
+    // 지문이 바뀔 때 모바일 탭을 다시 '지문'으로 리셋
+    useEffect(() => {
+        setMobileTab('passage');
+    }, [currentPassageIdx]);
+
     const currentPassage = passages[currentPassageIdx];
     const progress = Math.round(((currentPassageIdx) / passages.length) * 100);
 

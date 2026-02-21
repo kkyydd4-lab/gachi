@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { DiagnosticPassage } from '../../types';
 import { renderPassageContent } from '../../utils/renderPassageContent';
 
@@ -23,6 +23,27 @@ const DiagnosticTest: React.FC<DiagnosticTestProps> = ({
 }) => {
     const [mobileTab, setMobileTab] = useState<'passage' | 'questions'>('passage');
     const [highlightedSentence, setHighlightedSentence] = useState<string | null>(null);
+    const [isBottom, setIsBottom] = useState(false);
+
+    const passageBottomRef = useRef<HTMLDivElement>(null);
+    const questionsBottomRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const observer = new IntersectionObserver(
+            ([entry]) => {
+                setIsBottom(entry.isIntersecting);
+            },
+            { threshold: 0.1, rootMargin: '0px 0px 50px 0px' }
+        );
+
+        const currentTarget = mobileTab === 'passage' ? passageBottomRef.current : questionsBottomRef.current;
+
+        if (currentTarget) {
+            observer.observe(currentTarget);
+        }
+
+        return () => observer.disconnect();
+    }, [mobileTab, passages, currentPassageIdx]); // 지문이 바뀌거나 탭이 바뀔 때 다시 관찰
 
     const currentPassage = passages[currentPassageIdx];
     const progress = Math.round(((currentPassageIdx) / passages.length) * 100);
@@ -75,6 +96,8 @@ const DiagnosticTest: React.FC<DiagnosticTestProps> = ({
                                     <div className="text-[17px] md:text-[19px] leading-[2.2] text-gray-700 font-serif tracking-wide whitespace-pre-line">
                                         {renderContent(currentPassage?.content || '')}
                                     </div>
+                                    {/* 하단 감지 마커 */}
+                                    <div ref={passageBottomRef} className="h-2 w-full" />
                                 </div>
                             </div>
                         </div>
@@ -176,12 +199,16 @@ const DiagnosticTest: React.FC<DiagnosticTestProps> = ({
                                     </button>
                                 )}
                             </div>
+
+                            {/* 질문 영역 하단 감지 마커 */}
+                            <div ref={questionsBottomRef} className="h-2 w-full lg:hidden" />
                         </div>
                     </div>
                 </div>
 
                 {/* Floating Mobile Tabs */}
-                <div className="lg:hidden absolute bottom-6 left-6 right-6 z-50">
+                <div className={`lg:hidden fixed bottom-0 left-0 right-0 p-6 z-50 transition-all duration-500 transform ${isBottom ? 'translate-y-0 opacity-100' : 'translate-y-20 opacity-0 pointer-events-none'
+                    }`}>
                     <div className="bg-navy/90 backdrop-blur-md rounded-full shadow-2xl p-1.5 flex mb-4">
                         <button
                             onClick={() => setMobileTab('passage')}

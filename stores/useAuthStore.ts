@@ -30,8 +30,20 @@ export const useAuthStore = create<AuthState>((set) => ({
         const savedSession = localStorage.getItem('literacy_session');
         if (savedSession) {
             try {
-                const user = JSON.parse(savedSession);
+                let user = JSON.parse(savedSession);
                 set({ user });
+
+                // Firebase 인증 상태 확인 및 최신 데이터 동기화
+                AuthService.onAuthStateChanged(async (firebaseUser) => {
+                    if (firebaseUser) {
+                        const users = await AuthService.getAllUsers();
+                        const latestUser = users.find(u => u.uid === firebaseUser.uid);
+                        if (latestUser) {
+                            set({ user: latestUser });
+                            localStorage.setItem('literacy_session', JSON.stringify(latestUser));
+                        }
+                    }
+                });
             } catch (e) {
                 console.error("Session parse error", e);
                 localStorage.removeItem('literacy_session');

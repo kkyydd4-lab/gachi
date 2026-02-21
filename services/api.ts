@@ -150,7 +150,8 @@ export const AuthService = {
 
       // Firestore에서 사용자 문서 업데이트
       await updateDoc(doc(db, USERS_COLLECTION, currentUser.uid), {
-        testResult: user.testResult
+        testResult: user.testResult,
+        testHistory: user.testHistory || []
       });
 
       return user;

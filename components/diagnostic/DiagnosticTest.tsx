@@ -63,13 +63,13 @@ const DiagnosticTest: React.FC<DiagnosticTestProps> = ({
             </header>
 
             {/* Main Layout */}
-            <main className="flex-1 overflow-hidden relative">
+            <main className="flex-1 overflow-auto relative">
                 <div className="max-w-7xl mx-auto h-full grid grid-cols-1 lg:grid-cols-2 gap-0 lg:gap-8 p-0 lg:p-6">
 
                     {/* Left: Passage (Mobile: Tab 1) */}
-                    <div className={`h-full flex flex-col transition-all duration-300 ${mobileTab === 'passage' ? 'flex' : 'hidden lg:flex'}`}>
-                        <div className="bg-white lg:rounded-[2.5rem] shadow-sm border border-gray-100 h-full overflow-hidden flex flex-col relative group">
-                            <div className="p-6 lg:p-10 overflow-y-auto custom-scrollbar flex-1">
+                    <div className={`flex flex-col transition-all duration-300 ${mobileTab === 'passage' ? 'flex' : 'hidden lg:flex'}`}>
+                        <div className="bg-white lg:rounded-[2.5rem] shadow-sm border border-gray-100 flex flex-col relative group">
+                            <div className="p-6 lg:p-10 pb-32 lg:pb-10 overflow-y-auto custom-scrollbar">
                                 <div className="prose prose-lg max-w-none">
                                     <h2 className="text-2xl font-black text-navy mb-8 leading-snug">{currentPassage?.title}</h2>
                                     <div className="text-[17px] md:text-[19px] leading-[2.2] text-gray-700 font-serif tracking-wide whitespace-pre-line">
@@ -77,14 +77,12 @@ const DiagnosticTest: React.FC<DiagnosticTestProps> = ({
                                     </div>
                                 </div>
                             </div>
-                            {/* Scroll Indicator */}
-                            <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-white to-transparent pointer-events-none" />
                         </div>
                     </div>
 
                     {/* Right: Questions (Mobile: Tab 2) */}
-                    <div className={`h-full flex flex-col transition-all duration-300 bg-[#F8FAFC] lg:bg-transparent ${mobileTab === 'questions' ? 'flex' : 'hidden lg:flex'}`}>
-                        <div className="flex-1 overflow-y-auto custom-scrollbar p-4 lg:p-0 space-y-6 pb-32 lg:pb-0">
+                    <div className={`flex flex-col transition-all duration-300 bg-[#F8FAFC] lg:bg-transparent ${mobileTab === 'questions' ? 'flex' : 'hidden lg:flex'}`}>
+                        <div className="p-4 lg:p-0 space-y-6 pb-40 lg:pb-0">
                             {currentPassage?.questions.map((q, idx) => (
                                 <div
                                     key={q.id}

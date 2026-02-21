@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { AssetService, LearningSessionService } from '../services/api';
 import { useContentGenerator } from './useContentGenerator';
-import { Asset, LearningSession, GradeCurriculumConfig, GradeGroupType, AssetStatus, LearningSessionStatus } from '../types/domain';
-import { INITIAL_CURRICULUM_DATA, getDifficultyInstructions, SENTENCE_LENGTH_GUIDE } from '../data/curriculum';
+import { Asset, LearningSession, GradeCurriculumConfig, GradeGroupType } from '../types/domain';
+import { getDifficultyInstructions, SENTENCE_LENGTH_GUIDE } from '../data/curriculum';
 
 export type AgentStep = 'IDLE' | 'PLANNING' | 'WRITING';
 
@@ -17,7 +17,7 @@ export const useSessionGenerator = (
     const [agentStep, setAgentStep] = useState<AgentStep>('IDLE');
 
     // Hook
-    const { generatePassage, generateQuestions, isLoading: isHookLoading, error: hookError } = useContentGenerator();
+    const { generatePassage, generateQuestions } = useContentGenerator();
 
     const generateSession = async (
         curriculumConfig: GradeCurriculumConfig,
@@ -39,20 +39,13 @@ export const useSessionGenerator = (
         setError(null);
 
         const { config, categories, topics } = curriculumConfig;
-
-        // Session Generation Strategy: 1 Session = 4 Passages
         const SESSION_SIZE = 4;
         let targetTopics: string[] = [];
 
+        // 1. 토픽 선정 로직
         if (selectedTopicsList.length > 0) {
             targetTopics = selectedTopicsList;
         } else {
-            // Pick 4 unused topics randomly is handled in component mostly, 
-            // but for safety we can do basic random pick here if empty list passed implies random.
-            // However, the component logic was more complex (checking existing assets).
-            // For now, we assume targetTopics are passed correctly or handled here.
-
-            // To keep logic identical to component, we reproduce the random picking if list is empty
             try {
                 const existingAssets = await AssetService.getAllAssets();
                 const usedTopics = new Set(
@@ -70,16 +63,9 @@ export const useSessionGenerator = (
                 }
             } catch (err) {
                 console.error("Failed to fetch assets for topic filtering", err);
-                // Fallback to simple random
                 const shuffled = [...topics].sort(() => Math.random() - 0.5);
                 targetTopics = shuffled.slice(0, SESSION_SIZE);
             }
-        }
-
-        // If Logic above selected topics, overwrite targetTopics (if selectedTopicsList was empty)
-        // If selectedTopicsList was NOT empty, we use it directly.
-        if (selectedTopicsList.length > 0) {
-            targetTopics = selectedTopicsList;
         }
 
         try {
@@ -105,18 +91,18 @@ export const useSessionGenerator = (
 
             const distributedQuestions = distributeQuestions(categories, targetTopics.length);
 
-            for (let i = 0; i < targetTopics.length; i++) {
-                const subject = targetTopics[i];
-                const passageCategories = distributedQuestions[i];
+            // 병렬 생성을 위한 단위 함수
+            const generateAssetForTopic = async (subject: string, index: number): Promise<Asset | null> => {
+                try {
+                    const passageCategories = distributedQuestions[index];
+                    const passageQuestionCount = Object.values(passageCategories).reduce((a, b) => a + b, 0);
+                    const questionDistribution = Object.entries(passageCategories)
+                        .filter(([_, count]) => count > 0)
+                        .map(([cat, count]) => `${cat}: ${count}문항`)
+                        .join(', ');
 
-                const passageQuestionCount = Object.values(passageCategories).reduce((a, b) => a + b, 0);
-                const questionDistribution = Object.entries(passageCategories)
-                    .filter(([_, count]) => count > 0)
-                    .map(([cat, count]) => `${cat}: ${count}문항`)
-                    .join(', ');
-
-                const guide = SENTENCE_LENGTH_GUIDE[selectedGrade];
-                const detailedPassagePrompt = `
+                    const guide = SENTENCE_LENGTH_GUIDE[selectedGrade];
+                    const detailedPassagePrompt = `
 [주제]: ${subject}
 [글자 수]: 반드시 ${config.charCount} 이상 (절대 짧게 쓰지 마세요!)
 [문체]: ${config.style}
@@ -128,20 +114,19 @@ ${additionalInstructions ? `[추가 지침]: ${additionalInstructions}` : ''}
 ⚠️ 중요: 지문은 반드시 ${config.charCount} 이상이어야 합니다. 
 짧은 지문(300자 미만)은 거부됩니다. 충분히 상세하고 풍부한 내용을 포함하세요.`;
 
-                setAgentStep('PLANNING');
+                    // 지문 생성
+                    const passageResult = await generatePassage(subject, selectedGrade, {
+                        length: config.charCount,
+                        difficulty: selectedDifficulty,
+                        additionalPrompt: detailedPassagePrompt
+                    });
 
-                const passageResult = await generatePassage(subject, selectedGrade, {
-                    length: config.charCount,
-                    difficulty: selectedDifficulty,
-                    additionalPrompt: detailedPassagePrompt
-                });
+                    if (!passageResult) {
+                        console.error(`Passage generation failed for topic: ${subject}`);
+                        return null;
+                    }
 
-                if (!passageResult) {
-                    console.error('Passage generation failed');
-                    continue;
-                }
-
-                const examinerPrompt = `
+                    const examinerPrompt = `
 [이 지문에서 출제할 문항 구성]: ${questionDistribution} (총 ${passageQuestionCount}문항)
 ${getDifficultyInstructions(selectedDifficulty, selectedGrade)}
 
@@ -167,7 +152,7 @@ ${getDifficultyInstructions(selectedDifficulty, selectedGrade)}
 - 지문의 특정 단어나 문장에 표식을 할 때 **반드시** 다음 형식을 사용:
   - 단어/어구 밑줄: ㉠[밑줄:솔솔 나서] → ㉠ 마커 + "솔솔 나서"에 밑줄 표시
   - 문장 밑줄: ㉡[문장밑줄:우리 동네에는 많은 사람들이 살고 있어요] → ㉡ 마커 + 문장 전체에 밑줄 표시
-- 예시: "빵 냄새가 ㉠[밑줄:솔솔] 나서 너무 좋아요" → 문항에서 "밑줄 친 ㉠'솔솔'의 의미는?"
+  - 예시: "빵 냄새가 ㉠[밑줄:솔솔] 나서 너무 좋아요" → 문항에서 "밑줄 친 ㉠'솔솔'의 의미는?"
 - ⚠️ 절대 HTML 태그(<u>, </u> 등) 사용 금지!
 - ⚠️ ㉠만 단독으로 쓰지 마세요! 반드시 ㉠[밑줄:대상텍스트] 형식으로 작성!
 - ⚠️ 표식할 텍스트의 위치를 정확히 지키세요. 표식 대상이 "솔솔"이면 "솔솔" 바로 앞에 ㉠[밑줄:솔솔]을 넣어야 합니다.
@@ -194,44 +179,66 @@ ${getDifficultyInstructions(selectedDifficulty, selectedGrade)}
 
 ${additionalInstructions ? `[추가 지침]: ${additionalInstructions}` : ''}`;
 
-                setAgentStep('WRITING');
+                    // 문항 생성
+                    // 병렬 실행 중이므로 상태 업데이트는 개별 진행
+                    const questionResult = await generateQuestions(passageResult.content, passageQuestionCount, selectedGrade, {
+                        instructions: examinerPrompt
+                    });
 
-                const questionResult = await generateQuestions(passageResult.content, passageQuestionCount, selectedGrade, {
-                    instructions: examinerPrompt
-                });
+                    if (!questionResult || !questionResult.questions) {
+                        console.error(`Question generation failed for topic: ${subject}`);
+                        return null;
+                    }
 
-                if (!questionResult || !questionResult.questions) {
-                    console.error('Question generation failed');
-                    continue;
+                    // Asset 생성
+                    const newAsset: Asset = {
+                        assetId: crypto.randomUUID(),
+                        gradeGroup: selectedGrade,
+                        subject: subject,
+                        title: passageResult.title || "제목 없음",
+                        content: questionResult.modified_content || passageResult.content,
+                        difficulty: selectedDifficulty,
+                        questions: (questionResult.questions || []).map((q: any) => ({
+                            ...q,
+                            id: typeof q.id === 'number' ? q.id : (Number(q.id) || Math.floor(Math.random() * 10000)),
+                            options: (q.options || []).map((opt: string) =>
+                                opt.replace(/^[①-⑮0-9.\s]+/, '').trim()
+                            ),
+                            rationale: q.rationale || null
+                        })),
+                        createdAt: new Date().toISOString(),
+                        status: 'CANDIDATE',
+                        feedback: null
+                    };
+
+                    // 개별 진행상황 업데이트
+                    setGeneratedCount(prev => prev + 1);
+                    setProgress(prev => Math.min(prev + Math.round(100 / targetTopics.length), 100));
+
+                    return newAsset;
+
+                } catch (error) {
+                    console.error(`Error generating asset for topic ${subject}:`, error);
+                    return null;
                 }
+            };
 
-                const newAsset: Asset = {
-                    assetId: crypto.randomUUID(),
-                    gradeGroup: selectedGrade,
-                    subject: subject,
-                    title: passageResult.title || "제목 없음",
-                    content: questionResult.modified_content || passageResult.content,
-                    difficulty: selectedDifficulty,
-                    questions: (questionResult.questions || []).map((q: any) => ({
-                        ...q,
-                        id: typeof q.id === 'number' ? q.id : (Number(q.id) || Math.floor(Math.random() * 10000)),
-                        options: (q.options || []).map((opt: string) =>
-                            opt.replace(/^[①-⑮0-9.\s]+/, '').trim()
-                        ),
-                        rationale: q.rationale || null
-                    })),
-                    createdAt: new Date().toISOString(),
-                    status: 'CANDIDATE',
-                    feedback: null
-                };
+            // Main Generator Logic - Parallel Execution
+            setAgentStep('WRITING');
 
-                await AssetService.createAsset(newAsset);
-                newAssets.push(newAsset);
-                setGeneratedCount(prev => prev + 1);
-                setProgress(Math.round(((i + 1) / totalToGenerate) * 100));
-            }
+            const results = await Promise.all(
+                targetTopics.map((topic, index) => generateAssetForTopic(topic, index))
+            );
 
+            // 성공한 결과 수집
+            results.forEach(asset => {
+                if (asset) newAssets.push(asset);
+            });
+
+            // 일괄 저장 (DB 부하 고려 시 개별 저장도 괜찮지만, 트랜잭션 관점에서는 일괄이 나음)
             if (newAssets.length > 0) {
+                await Promise.all(newAssets.map(asset => AssetService.createAsset(asset)));
+
                 const allSessions = await LearningSessionService.getAllSessions();
                 const sessionCount = allSessions.filter(s => s.gradeGroup === selectedGrade).length;
                 const newSession: LearningSession = {

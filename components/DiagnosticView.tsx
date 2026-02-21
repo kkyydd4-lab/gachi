@@ -3,7 +3,7 @@ import { generateContent } from '../services/gemini';
 import { UserAccount, DiagnosticPassage, AdminConfig, GradeGroupType, Asset, TestSession, QuestionLog, AgentStatus, BlueprintDebugInfo, WrongAnswerRecord, LearningSession } from '../types';
 import { AssetService, ConfigService, CurriculumService, LearningSessionService } from '../services/api';
 import * as Analytics from '../services/analytics';
-import { QuickFeedback, FeedbackButtons } from './MicroSurvey';
+import { FeedbackButtons } from './MicroSurvey';
 
 // Sub-components
 import DiagnosticLoading from './diagnostic/DiagnosticLoading';
@@ -87,11 +87,6 @@ const DiagnosticView: React.FC<DiagnosticViewProps> = ({ user, onComplete, onCan
   const [testStartTime] = useState<number>(Date.now());
   const [currentQuestionId, setCurrentQuestionId] = useState<number | null>(null);
 
-  // Micro Survey State
-  const [showQuickFeedback, setShowQuickFeedback] = useState(false);
-  const [feedbackQuestionId, setFeedbackQuestionId] = useState<number | null>(null);
-
-  const FEEDBACK_TRIGGER_QUESTIONS = [3, 5, 8, 12];
 
   // ========================================
   // Session Initialization & Recovery
@@ -173,25 +168,8 @@ const DiagnosticView: React.FC<DiagnosticViewProps> = ({ user, onComplete, onCan
 
     setQuestionStartTime(Date.now());
     setCurrentQuestionId(questionId);
-
-    const answeredCount = Object.keys(answers).length + 1;
-    if (FEEDBACK_TRIGGER_QUESTIONS.includes(answeredCount)) {
-      setFeedbackQuestionId(questionId);
-      setShowQuickFeedback(true);
-    }
   }, [session, questionStartTime, answers]);
 
-  const handleQuickFeedback = useCallback((difficulty: 1 | 2 | 3 | 4 | 5) => {
-    if (session && feedbackQuestionId !== null) {
-      const log = session.questionLogs.find(l => l.questionId === feedbackQuestionId);
-      if (log) {
-        log.difficultyFeedback = difficulty;
-        Analytics.updateSessionProgress(session);
-      }
-    }
-    setShowQuickFeedback(false);
-    setFeedbackQuestionId(null);
-  }, [session, feedbackQuestionId]);
 
   const determineGradeGroup = (gradeStr: string): GradeGroupType => {
     if (gradeStr.includes('초등 1') || gradeStr.includes('초등 2')) return '초등 저학년';
@@ -472,17 +450,6 @@ const DiagnosticView: React.FC<DiagnosticViewProps> = ({ user, onComplete, onCan
         onSubmit={calculateResults}
       />
 
-      {showQuickFeedback && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center animate-fade-in px-6">
-          <div className="bg-white rounded-[2rem] p-6 w-full max-w-sm">
-            <FeedbackButtons
-              onSelect={(difficulty) => {
-                handleQuickFeedback(difficulty);
-              }}
-            />
-          </div>
-        </div>
-      )}
 
       {isAnalyzing && (
         <div className="fixed inset-0 z-[70] bg-white/90 backdrop-blur flex flex-col items-center justify-center animate-fade-in">

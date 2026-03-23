@@ -217,17 +217,26 @@ ${additionalInstructions ? `[추가 지침]: ${additionalInstructions}` : ''}`;
                 }
             };
 
-            // Main Generator Logic - Parallel Execution
+            // Main Generator Logic - Sequential Execution (Gemini rate limit 대응)
             setAgentStep('WRITING');
+            const MAX_RETRY = 2;
 
-            const results = await Promise.all(
-                targetTopics.map((topic, index) => generateAssetForTopic(topic, index))
-            );
-
-            // 성공한 결과 수집
-            results.forEach(asset => {
-                if (asset) newAssets.push(asset);
-            });
+            for (let i = 0; i < targetTopics.length; i++) {
+                let asset: Asset | null = null;
+                for (let attempt = 0; attempt <= MAX_RETRY; attempt++) {
+                    if (attempt > 0) {
+                        console.log(`🔄 재시도 ${attempt}/${MAX_RETRY}: ${targetTopics[i]}`);
+                        await new Promise(r => setTimeout(r, 2000 * attempt)); // 2초, 4초 대기
+                    }
+                    asset = await generateAssetForTopic(targetTopics[i], i);
+                    if (asset) break;
+                }
+                if (asset) {
+                    newAssets.push(asset);
+                } else {
+                    console.error(`❌ ${targetTopics[i]} 최종 실패 (${MAX_RETRY}회 재시도 후)`);
+                }
+            }
 
             // 일괄 저장 (DB 부하 고려 시 개별 저장도 괜찮지만, 트랜잭션 관점에서는 일괄이 나음)
             if (newAssets.length > 0) {

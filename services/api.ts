@@ -51,13 +51,15 @@ export const AuthService = {
 
   async login(id: string, password: string): Promise<UserAccount | null> {
     try {
-      // 관리자 계정 하드코딩 체크
+      // 관리자 계정 체크 (환경변수 기반)
+      const adminId = import.meta.env.VITE_ADMIN_ID;
+      const adminPw = import.meta.env.VITE_ADMIN_PW;
       const normalizedId = id.trim().toLowerCase();
       const normalizedPw = password.trim();
 
-      if (normalizedId === 'admin' && normalizedPw === 'admin') {
+      if (adminId && adminPw && normalizedId === adminId && normalizedPw === adminPw) {
         return {
-          id: 'admin',
+          id: adminId,
           password: '',
           name: '관리자',
           role: 'ADMIN',
@@ -108,9 +110,10 @@ export const AuthService = {
       // Firebase Auth에 사용자 생성
       const userCredential = await createUserWithEmailAndPassword(auth, email, user.password);
 
-      // Firestore에 사용자 프로필 저장
-      const userData: UserAccount = {
-        ...user,
+      // Firestore에 사용자 프로필 저장 (비밀번호 제외)
+      const { password: _pw, ...profileData } = user;
+      const userData = {
+        ...profileData,
         id: user.id, // 원래 ID 유지
       };
 
@@ -158,6 +161,20 @@ export const AuthService = {
     } catch (error) {
       console.error('Update result error:', error);
       throw error;
+    }
+  },
+
+  // 단일 사용자 조회 (uid로)
+  async getUserByUid(uid: string): Promise<UserAccount | null> {
+    try {
+      const userDoc = await getDoc(doc(db, USERS_COLLECTION, uid));
+      if (userDoc.exists()) {
+        return { ...userDoc.data(), uid: userDoc.id } as UserAccount;
+      }
+      return null;
+    } catch (error) {
+      console.error('Get user by uid error:', error);
+      return null;
     }
   },
 

@@ -36,8 +36,7 @@ export const useAuthStore = create<AuthState>((set) => ({
                 // Firebase 인증 상태 확인 및 최신 데이터 동기화
                 AuthService.onAuthStateChanged(async (firebaseUser) => {
                     if (firebaseUser) {
-                        const users = await AuthService.getAllUsers();
-                        const latestUser = users.find(u => u.uid === firebaseUser.uid);
+                        const latestUser = await AuthService.getUserByUid(firebaseUser.uid);
                         if (latestUser) {
                             set({ user: latestUser });
                             localStorage.setItem('literacy_session', JSON.stringify(latestUser));

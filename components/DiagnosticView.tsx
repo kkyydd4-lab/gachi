@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { generateContent } from '../services/gemini';
 import { UserAccount, DiagnosticPassage, AdminConfig, GradeGroupType, Asset, TestSession, QuestionLog, AgentStatus, BlueprintDebugInfo, WrongAnswerRecord, LearningSession } from '../types';
-import { AssetService, ConfigService, CurriculumService, LearningSessionService } from '../services/api';
+import { AssetService, ConfigService, CurriculumService, LearningSessionService, SessionService } from '../services/api';
 import * as Analytics from '../services/analytics';
 import { FeedbackButtons } from './MicroSurvey';
 
@@ -205,7 +205,7 @@ const DiagnosticView: React.FC<DiagnosticViewProps> = ({ user, onComplete, onCan
         const approvedSessions = await LearningSessionService.getApprovedSessions(userGradeGroup);
 
         // 2. Fetch Past User Sessions to find used learningSessionIds
-        const pastSessions = await import('../services/api').then(m => m.SessionService.getSessionsByUser(user.id));
+        const pastSessions = await SessionService.getSessionsByUser(user.id);
         const usedSessionIds = new Set(pastSessions.map(s => s.learningSessionId).filter(Boolean));
 
         // 3. Find first unused session
@@ -408,7 +408,6 @@ const DiagnosticView: React.FC<DiagnosticViewProps> = ({ user, onComplete, onCan
     setFinalResult(resultObj);
     setIsAnalyzing(false);
     setShowResult(true);
-    user.testResult = resultObj;
   };
 
   const handleHomeClick = () => {

@@ -11,6 +11,17 @@ export default defineConfig(({ mode }) => {
     },
     plugins: [react()],
     define: {},
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            firebase: ['firebase/app', 'firebase/auth', 'firebase/firestore', 'firebase/analytics'],
+            recharts: ['recharts'],
+            vendor: ['react', 'react-dom', 'react-router-dom'],
+          },
+        },
+      },
+    },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

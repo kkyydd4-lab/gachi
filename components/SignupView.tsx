@@ -108,7 +108,7 @@ const SignupView: React.FC<SignupViewProps> = ({ onBack }) => {
         ...formData,
         academyId: finalAcademyId, // 실제 ID로 저장
         role: formData.role as 'STUDENT' | 'TEACHER' | 'ADMIN', // 타입 단언
-        signupDate: new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })
+        signupDate: new Date().toISOString()
       };
 
       const success = await AuthService.signup(newUser);

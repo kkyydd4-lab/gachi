@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { AssetService, AuthService, AcademyService, ConfigService } from '../services/api';
-import { UserAccount, Asset, Academy, AdminConfig, GradeGroupType, AssetStatus } from '../types';
+import { AssetService, AuthService, AcademyService, ConfigService, LearningSessionService } from '../services/api';
+import { UserAccount, Asset, Academy, AdminConfig, GradeGroupType, AssetStatus, LearningSessionStatus } from '../types';
 
 // Keys
 export const QUERY_KEYS = {
@@ -119,15 +119,15 @@ export const useSaveConfig = () => {
 export const useLearningSessions = () => {
     return useQuery({
         queryKey: QUERY_KEYS.learningSessions,
-        queryFn: () => import('../services/api').then(m => m.LearningSessionService.getAllSessions()),
+        queryFn: () => LearningSessionService.getAllSessions(),
     });
 };
 
 export const useUpdateLearningSessionStatus = () => {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: ({ sessionId, status }: { sessionId: string; status: any }) =>
-            import('../services/api').then(m => m.LearningSessionService.updateSessionStatus(sessionId, status)),
+        mutationFn: ({ sessionId, status }: { sessionId: string; status: LearningSessionStatus }) =>
+            LearningSessionService.updateSessionStatus(sessionId, status),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: QUERY_KEYS.learningSessions });
             queryClient.invalidateQueries({ queryKey: QUERY_KEYS.assets });
@@ -139,18 +139,17 @@ export const useDeleteLearningSession = () => {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async (sessionId: string) => {
-            const api = await import('../services/api');
             // Get session to find asset IDs
-            const sessions = await api.LearningSessionService.getAllSessions();
+            const sessions = await LearningSessionService.getAllSessions();
             const session = sessions.find(s => s.sessionId === sessionId);
             if (session) {
                 // Delete all assets in this session
                 for (const assetId of session.assetIds) {
-                    await api.AssetService.deleteAsset(assetId);
+                    await AssetService.deleteAsset(assetId);
                 }
             }
             // Delete session itself
-            await api.LearningSessionService.deleteSession(sessionId);
+            await LearningSessionService.deleteSession(sessionId);
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: QUERY_KEYS.learningSessions });

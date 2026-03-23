@@ -540,33 +540,36 @@ const ReportView: React.FC<ReportViewProps> = ({ user, onLogout, onStartTest }) 
                           </summary>
                           <div className="p-5 pt-0 space-y-4">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                              {wrong.options.map((opt, optIdx) => (
+                              {wrong.options.map((opt, optIdx) => {
+                                const optNum = optIdx + 1; // 1-based로 변환하여 비교
+                                return (
                                 <div
                                   key={optIdx}
-                                  className={`p-3 rounded-xl text-sm font-medium flex items-center gap-2 ${optIdx === wrong.correctAnswer
+                                  className={`p-3 rounded-xl text-sm font-medium flex items-center gap-2 ${optNum === wrong.correctAnswer
                                     ? 'bg-primary/10 text-primary border-2 border-primary'
-                                    : optIdx === wrong.userAnswer
+                                    : optNum === wrong.userAnswer
                                       ? 'bg-red-100 text-red-500 border-2 border-red-300 line-through'
                                       : 'bg-gray-50 text-gray-400'
                                     }`}
                                 >
-                                  <span className={`w-6 h-6 rounded-full text-xs flex items-center justify-center font-black ${optIdx === wrong.correctAnswer
+                                  <span className={`w-6 h-6 rounded-full text-xs flex items-center justify-center font-black ${optNum === wrong.correctAnswer
                                     ? 'bg-primary text-white'
-                                    : optIdx === wrong.userAnswer
+                                    : optNum === wrong.userAnswer
                                       ? 'bg-red-400 text-white'
                                       : 'bg-gray-200 text-gray-500'
                                     }`}>
-                                    {optIdx + 1}
+                                    {optNum}
                                   </span>
                                   {opt}
-                                  {optIdx === wrong.correctAnswer && (
+                                  {optNum === wrong.correctAnswer && (
                                     <span className="material-symbols-outlined text-primary text-lg ml-auto">check_circle</span>
                                   )}
-                                  {optIdx === wrong.userAnswer && optIdx !== wrong.correctAnswer && (
+                                  {optNum === wrong.userAnswer && optNum !== wrong.correctAnswer && (
                                     <span className="material-symbols-outlined text-red-400 text-lg ml-auto">cancel</span>
                                   )}
                                 </div>
-                              ))}
+                                );
+                              })}
                             </div>
                             <div className="bg-white rounded-xl p-4 border border-gray-100">
                               <p className="text-xs text-gray-400 font-bold mb-1 flex items-center gap-1">

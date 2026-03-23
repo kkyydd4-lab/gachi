@@ -60,16 +60,26 @@ export const AuthService = {
       if (adminId && adminPw && normalizedId === adminId && password.trim() === adminPw) {
         // Firebase Auth 세션도 생성 (Firestore 접근 권한 필요)
         const adminEmail = toEmail(adminId);
+        // Firebase Auth는 6자 이상 비밀번호 필요
+        const authPassword = adminPw.length >= 6 ? adminPw : adminPw + '!@#$%^';
+
+        let authSuccess = false;
         try {
-          await signInWithEmailAndPassword(auth, adminEmail, adminPw);
-        } catch {
-          // Auth에 계정이 없으면 자동 생성 후 로그인
+          await signInWithEmailAndPassword(auth, adminEmail, authPassword);
+          authSuccess = true;
+          console.log('[Admin] Firebase Auth 로그인 성공');
+        } catch (signInError: any) {
+          console.log('[Admin] 로그인 실패, 계정 생성 시도:', signInError.code);
           try {
-            await createUserWithEmailAndPassword(auth, adminEmail, adminPw);
-          } catch {
-            // 이미 존재하지만 비밀번호 불일치 등 — 무시하고 진행
+            await createUserWithEmailAndPassword(auth, adminEmail, authPassword);
+            authSuccess = true;
+            console.log('[Admin] Firebase Auth 계정 생성 성공');
+          } catch (createError: any) {
+            console.error('[Admin] 계정 생성도 실패:', createError.code, createError.message);
           }
         }
+
+        console.log('[Admin] Auth 상태:', authSuccess, 'currentUser:', !!auth.currentUser);
 
         const adminUser: UserAccount = {
           id: adminId,
@@ -94,7 +104,9 @@ export const AuthService = {
                 uid: auth.currentUser.uid
               });
             }
-          } catch { /* ignore */ }
+          } catch (e) {
+            console.error('[Admin] Firestore 프로필 저장 실패:', e);
+          }
         }
 
         return adminUser;

@@ -26,12 +26,6 @@ export const useSessionGenerator = (
         selectedTopicsList: string[],
         additionalInstructions: string
     ) => {
-        const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-        if (!apiKey) {
-            setError("API 키가 설정되지 않았습니다. .env 파일을 확인하고 서버를 재시작해주세요.");
-            return;
-        }
-
         setIsGenerating(true);
         setProgress(0);
         setGeneratedCount(0);

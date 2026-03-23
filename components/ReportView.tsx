@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { ViewState, UserAccount, WrongAnswerRecord, PostTestSurvey } from '../types';
 import { SessionService } from '../services/api';
 import { PostTestSurveyForm } from './MicroSurvey';
@@ -23,6 +23,29 @@ const ReportView: React.FC<ReportViewProps> = ({ user, onLogout, onStartTest }) 
   // MVP v2: 설문 상태 관리
   const [showSurvey, setShowSurvey] = useState(true);
   const [surveySubmitted, setSurveySubmitted] = useState(false);
+
+  // 오답 복습 모드
+  const [retryMode, setRetryMode] = useState(false);
+  const [retryAnswers, setRetryAnswers] = useState<Record<number, number>>({});
+  const [retryRevealed, setRetryRevealed] = useState<Set<number>>(new Set());
+
+  const wrongAnswers = user?.testResult?.wrongAnswers || [];
+  const retryCorrectCount = wrongAnswers.filter(w => retryAnswers[w.questionId] === w.correctAnswer).length;
+  const retryComplete = Object.keys(retryAnswers).length === wrongAnswers.length;
+
+  const handleRetryAnswer = useCallback((questionId: number, choice: number) => {
+    if (retryRevealed.has(questionId)) return; // 이미 확인한 문항은 변경 불가
+    setRetryAnswers(prev => ({ ...prev, [questionId]: choice }));
+  }, [retryRevealed]);
+
+  const handleReveal = useCallback((questionId: number) => {
+    setRetryRevealed(prev => new Set(prev).add(questionId));
+  }, []);
+
+  const resetRetry = useCallback(() => {
+    setRetryAnswers({});
+    setRetryRevealed(new Set());
+  }, []);
 
   // 설문 제출 핸들러
   const handleSurveySubmit = async (survey: PostTestSurvey) => {
@@ -511,76 +534,209 @@ const ReportView: React.FC<ReportViewProps> = ({ user, onLogout, onStartTest }) 
                   </div>
                 )}
 
-                {/* 오답 해설 섹션 */}
-                {user?.testResult?.wrongAnswers && user.testResult.wrongAnswers.length > 0 && (
+                {/* 오답 복습 섹션 */}
+                {wrongAnswers.length > 0 && (
                   <div className="mt-12 pt-12 border-t border-gray-100">
-                    <h4 className="text-xl font-black text-navy mb-6 flex items-center gap-3">
-                      <span className="material-symbols-outlined text-red-400 text-3xl">rate_review</span>
-                      오답 해설 ({user.testResult.wrongAnswers.length}문항)
-                    </h4>
+                    <div className="flex items-center justify-between mb-6">
+                      <h4 className="text-xl font-black text-navy flex items-center gap-3">
+                        <span className="material-symbols-outlined text-red-400 text-3xl">rate_review</span>
+                        {retryMode ? '다시 풀기' : '오답 해설'} ({wrongAnswers.length}문항)
+                      </h4>
+                      <div className="flex items-center gap-2">
+                        {retryMode && (
+                          <span className="text-sm font-bold text-primary">
+                            {retryCorrectCount}/{wrongAnswers.length} 정답
+                          </span>
+                        )}
+                        <button
+                          onClick={() => { setRetryMode(!retryMode); resetRetry(); }}
+                          className={`px-4 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-1.5 ${
+                            retryMode
+                              ? 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                              : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'
+                          }`}
+                        >
+                          <span className="material-symbols-outlined text-sm">{retryMode ? 'visibility' : 'refresh'}</span>
+                          {retryMode ? '해설 보기' : '다시 풀기'}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* 다시 풀기 완료 결과 */}
+                    {retryMode && retryComplete && (
+                      <div className={`mb-6 p-5 rounded-2xl border-2 ${
+                        retryCorrectCount === wrongAnswers.length
+                          ? 'bg-primary/5 border-primary/30'
+                          : 'bg-amber-50 border-amber-200'
+                      }`}>
+                        <p className="text-lg font-black text-navy">
+                          {retryCorrectCount === wrongAnswers.length
+                            ? '모든 오답을 정복했어요!'
+                            : `${wrongAnswers.length}문항 중 ${retryCorrectCount}문항 정답!`}
+                        </p>
+                        <p className="text-sm text-gray-500 mt-1">
+                          {retryCorrectCount === wrongAnswers.length
+                            ? '완벽합니다. 이 역량들이 확실히 성장했네요.'
+                            : '아래에서 틀린 문항의 해설을 확인하고 다시 도전해 보세요.'}
+                        </p>
+                        {retryCorrectCount < wrongAnswers.length && (
+                          <button
+                            onClick={resetRetry}
+                            className="mt-3 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-colors"
+                          >
+                            한 번 더 도전하기
+                          </button>
+                        )}
+                      </div>
+                    )}
+
                     <div className="space-y-4">
-                      {user.testResult.wrongAnswers.map((wrong, idx) => (
-                        <details key={wrong.questionId} className="bg-red-50/50 rounded-2xl border border-red-100 overflow-hidden group">
-                          <summary className="p-5 cursor-pointer flex items-center gap-4 hover:bg-red-50 transition-colors list-none">
-                            <span className="w-8 h-8 bg-red-100 text-red-500 rounded-lg flex items-center justify-center font-black text-sm shrink-0">
-                              {idx + 1}
-                            </span>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className="text-xs text-red-400 font-bold">{wrong.category}</span>
-                                {'passageTitle' in wrong && (
-                                  <span className="text-xs text-gray-400 font-medium">
-                                    · {(wrong as any).passageTitle}
-                                  </span>
-                                )}
-                              </div>
-                              <p className="text-navy font-bold text-sm truncate">{wrong.question}</p>
-                            </div>
-                            <span className="material-symbols-outlined text-gray-400 group-open:rotate-180 transition-transform">expand_more</span>
-                          </summary>
-                          <div className="p-5 pt-0 space-y-4">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                              {wrong.options.map((opt, optIdx) => {
-                                const optNum = optIdx + 1; // 1-based로 변환하여 비교
-                                return (
-                                <div
-                                  key={optIdx}
-                                  className={`p-3 rounded-xl text-sm font-medium flex items-center gap-2 ${optNum === wrong.correctAnswer
-                                    ? 'bg-primary/10 text-primary border-2 border-primary'
-                                    : optNum === wrong.userAnswer
-                                      ? 'bg-red-100 text-red-500 border-2 border-red-300 line-through'
-                                      : 'bg-gray-50 text-gray-400'
-                                    }`}
-                                >
-                                  <span className={`w-6 h-6 rounded-full text-xs flex items-center justify-center font-black ${optNum === wrong.correctAnswer
-                                    ? 'bg-primary text-white'
-                                    : optNum === wrong.userAnswer
-                                      ? 'bg-red-400 text-white'
-                                      : 'bg-gray-200 text-gray-500'
-                                    }`}>
-                                    {optNum}
-                                  </span>
-                                  {opt}
-                                  {optNum === wrong.correctAnswer && (
-                                    <span className="material-symbols-outlined text-primary text-lg ml-auto">check_circle</span>
-                                  )}
-                                  {optNum === wrong.userAnswer && optNum !== wrong.correctAnswer && (
-                                    <span className="material-symbols-outlined text-red-400 text-lg ml-auto">cancel</span>
-                                  )}
+                      {wrongAnswers.map((wrong, idx) => {
+                        const isRevealed = retryRevealed.has(wrong.questionId);
+                        const retryAnswer = retryAnswers[wrong.questionId];
+                        const isRetryCorrect = retryAnswer === wrong.correctAnswer;
+
+                        return retryMode ? (
+                          /* 다시 풀기 모드 */
+                          <div key={wrong.questionId} className={`rounded-2xl border overflow-hidden transition-all ${
+                            isRevealed
+                              ? isRetryCorrect ? 'bg-primary/5 border-primary/30' : 'bg-red-50/50 border-red-200'
+                              : 'bg-white border-gray-200'
+                          }`}>
+                            <div className="p-5">
+                              <div className="flex items-start gap-4 mb-4">
+                                <span className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-sm shrink-0 ${
+                                  isRevealed
+                                    ? isRetryCorrect ? 'bg-primary text-white' : 'bg-red-400 text-white'
+                                    : 'bg-gray-100 text-gray-500'
+                                }`}>
+                                  {idx + 1}
+                                </span>
+                                <div className="flex-1">
+                                  <span className="text-xs font-bold text-gray-400 mb-1 block">{wrong.category}</span>
+                                  <p className="text-navy font-bold text-sm">{wrong.question}</p>
                                 </div>
-                                );
-                              })}
-                            </div>
-                            <div className="bg-white rounded-xl p-4 border border-gray-100">
-                              <p className="text-xs text-gray-400 font-bold mb-1 flex items-center gap-1">
-                                <span className="material-symbols-outlined text-sm">lightbulb</span>
-                                해설
-                              </p>
-                              <p className="text-navy text-sm font-medium leading-relaxed">{wrong.rationale}</p>
+                              </div>
+                              <div className="space-y-2 pl-0 md:pl-12">
+                                {wrong.options.map((opt, optIdx) => {
+                                  const optNum = optIdx + 1;
+                                  const isSelected = retryAnswer === optNum;
+                                  const showCorrect = isRevealed && optNum === wrong.correctAnswer;
+                                  const showWrong = isRevealed && isSelected && !isRetryCorrect;
+                                  return (
+                                    <button
+                                      key={optIdx}
+                                      onClick={() => handleRetryAnswer(wrong.questionId, optNum)}
+                                      disabled={isRevealed}
+                                      className={`w-full text-left p-3 rounded-xl text-sm font-medium flex items-center gap-2 transition-all ${
+                                        showCorrect
+                                          ? 'bg-primary/10 text-primary border-2 border-primary'
+                                          : showWrong
+                                            ? 'bg-red-100 text-red-500 border-2 border-red-300'
+                                            : isSelected
+                                              ? 'bg-indigo-50 text-indigo-700 ring-2 ring-indigo-200'
+                                              : 'bg-gray-50 text-gray-600 hover:bg-gray-100 disabled:hover:bg-gray-50'
+                                      }`}
+                                    >
+                                      <span className={`w-6 h-6 rounded-full text-xs flex items-center justify-center font-black ${
+                                        showCorrect ? 'bg-primary text-white'
+                                          : showWrong ? 'bg-red-400 text-white'
+                                          : isSelected ? 'bg-indigo-500 text-white'
+                                          : 'bg-gray-200 text-gray-500'
+                                      }`}>{optNum}</span>
+                                      {opt}
+                                      {showCorrect && <span className="material-symbols-outlined text-primary text-lg ml-auto">check_circle</span>}
+                                      {showWrong && <span className="material-symbols-outlined text-red-400 text-lg ml-auto">cancel</span>}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                              {/* 확인 버튼 또는 해설 */}
+                              {retryAnswer && !isRevealed && (
+                                <div className="mt-4 pl-0 md:pl-12">
+                                  <button
+                                    onClick={() => handleReveal(wrong.questionId)}
+                                    className="px-5 py-2.5 bg-navy text-white rounded-xl text-sm font-bold hover:bg-navy/90 transition-colors"
+                                  >
+                                    정답 확인
+                                  </button>
+                                </div>
+                              )}
+                              {isRevealed && (
+                                <div className="mt-4 pl-0 md:pl-12 bg-white rounded-xl p-4 border border-gray-100">
+                                  <p className="text-xs text-gray-400 font-bold mb-1 flex items-center gap-1">
+                                    <span className="material-symbols-outlined text-sm">lightbulb</span>
+                                    해설
+                                  </p>
+                                  <p className="text-navy text-sm font-medium leading-relaxed">{wrong.rationale}</p>
+                                </div>
+                              )}
                             </div>
                           </div>
-                        </details>
-                      ))}
+                        ) : (
+                          /* 기존 해설 모드 */
+                          <details key={wrong.questionId} className="bg-red-50/50 rounded-2xl border border-red-100 overflow-hidden group">
+                            <summary className="p-5 cursor-pointer flex items-center gap-4 hover:bg-red-50 transition-colors list-none">
+                              <span className="w-8 h-8 bg-red-100 text-red-500 rounded-lg flex items-center justify-center font-black text-sm shrink-0">
+                                {idx + 1}
+                              </span>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className="text-xs text-red-400 font-bold">{wrong.category}</span>
+                                  {'passageTitle' in wrong && (
+                                    <span className="text-xs text-gray-400 font-medium">
+                                      · {(wrong as any).passageTitle}
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-navy font-bold text-sm truncate">{wrong.question}</p>
+                              </div>
+                              <span className="material-symbols-outlined text-gray-400 group-open:rotate-180 transition-transform">expand_more</span>
+                            </summary>
+                            <div className="p-5 pt-0 space-y-4">
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                {wrong.options.map((opt, optIdx) => {
+                                  const optNum = optIdx + 1;
+                                  return (
+                                    <div
+                                      key={optIdx}
+                                      className={`p-3 rounded-xl text-sm font-medium flex items-center gap-2 ${optNum === wrong.correctAnswer
+                                        ? 'bg-primary/10 text-primary border-2 border-primary'
+                                        : optNum === wrong.userAnswer
+                                          ? 'bg-red-100 text-red-500 border-2 border-red-300 line-through'
+                                          : 'bg-gray-50 text-gray-400'
+                                      }`}
+                                    >
+                                      <span className={`w-6 h-6 rounded-full text-xs flex items-center justify-center font-black ${optNum === wrong.correctAnswer
+                                        ? 'bg-primary text-white'
+                                        : optNum === wrong.userAnswer
+                                          ? 'bg-red-400 text-white'
+                                          : 'bg-gray-200 text-gray-500'
+                                      }`}>
+                                        {optNum}
+                                      </span>
+                                      {opt}
+                                      {optNum === wrong.correctAnswer && (
+                                        <span className="material-symbols-outlined text-primary text-lg ml-auto">check_circle</span>
+                                      )}
+                                      {optNum === wrong.userAnswer && optNum !== wrong.correctAnswer && (
+                                        <span className="material-symbols-outlined text-red-400 text-lg ml-auto">cancel</span>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                              <div className="bg-white rounded-xl p-4 border border-gray-100">
+                                <p className="text-xs text-gray-400 font-bold mb-1 flex items-center gap-1">
+                                  <span className="material-symbols-outlined text-sm">lightbulb</span>
+                                  해설
+                                </p>
+                                <p className="text-navy text-sm font-medium leading-relaxed">{wrong.rationale}</p>
+                              </div>
+                            </div>
+                          </details>
+                        );
+                      })}
                     </div>
                   </div>
                 )}

@@ -178,6 +178,15 @@ const DiagnosticView: React.FC<DiagnosticViewProps> = ({ user, onComplete, onCan
     return '중등';
   };
 
+  // 학년군별 제한시간 (분)
+  const GRADE_TIME_LIMITS: Record<GradeGroupType, number> = {
+    '초등 저학년': 20,
+    '초등 중학년': 25,
+    '초등 고학년': 30,
+    '중등': 40,
+  };
+  const timeLimitMin = user ? GRADE_TIME_LIMITS[determineGradeGroup(user.grade)] : 30;
+
   // Adaptive Testing State
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
 
@@ -333,7 +342,12 @@ const DiagnosticView: React.FC<DiagnosticViewProps> = ({ user, onComplete, onCan
       return { label: cat, score: Math.round(score), average: referenceAverages[cat] || 60, correct: correctCount, total: totalCount };
     });
 
-    const totalScore = Math.round(competencyResults.reduce((acc, c) => acc + c.score, 0) / competencyResults.length);
+    // 문항 수 기반 가중평균: 전체 정답수/전체 문항수 × 100
+    const totalCorrectWeighted = competencyResults.reduce((acc, c) => acc + c.correct, 0);
+    const totalCountWeighted = competencyResults.reduce((acc, c) => acc + c.total, 0);
+    const totalScore = totalCountWeighted > 0
+      ? Math.round((totalCorrectWeighted / totalCountWeighted) * 100)
+      : 0;
 
     const weakest = [...competencyResults].sort((a, b) => a.score - b.score)[0];
     let prescription = undefined;
@@ -447,6 +461,8 @@ const DiagnosticView: React.FC<DiagnosticViewProps> = ({ user, onComplete, onCan
         onNextPassage={handleNextPassage}
         onPrevPassage={() => setCurrentPassageIdx(p => Math.max(0, p - 1))}
         onSubmit={calculateResults}
+        timeLimitMin={timeLimitMin}
+        onTimeUp={calculateResults}
       />
 
 

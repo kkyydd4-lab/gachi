@@ -10,6 +10,8 @@ interface DiagnosticTestProps {
     onNextPassage: () => void;
     onPrevPassage: () => void;
     onSubmit: () => void;
+    timeLimitMin?: number; // 전체 제한시간 (분)
+    onTimeUp?: () => void; // 시간 초과 콜백
 }
 
 const DiagnosticTest: React.FC<DiagnosticTestProps> = ({
@@ -19,18 +21,62 @@ const DiagnosticTest: React.FC<DiagnosticTestProps> = ({
     onAnswer,
     onNextPassage,
     onPrevPassage,
-    onSubmit
+    onSubmit,
+    timeLimitMin,
+    onTimeUp
 }) => {
     const [mobileTab, setMobileTab] = useState<'passage' | 'questions'>('passage');
     const [highlightedSentence, setHighlightedSentence] = useState<string | null>(null);
+    const [remainingSec, setRemainingSec] = useState<number | null>(
+        timeLimitMin ? timeLimitMin * 60 : null
+    );
+    const passageScrollRef = useRef<HTMLDivElement>(null);
+    const scrollPositions = useRef<Record<number, number>>({});
 
-    // 지문이 바뀔 때 모바일 탭을 다시 '지문'으로 리셋
+    // 전체 제한시간 타이머
     useEffect(() => {
+        if (remainingSec === null) return;
+        if (remainingSec <= 0) {
+            onTimeUp?.();
+            return;
+        }
+        const timer = setInterval(() => {
+            setRemainingSec(prev => (prev !== null ? prev - 1 : null));
+        }, 1000);
+        return () => clearInterval(timer);
+    }, [remainingSec, onTimeUp]);
+
+    // 지문 변경 시 스크롤 위치 저장/복원 + 모바일 탭 리셋
+    useEffect(() => {
+        // 이전 지문 스크롤 위치 저장은 cleanup에서 처리
         setMobileTab('passage');
+        // 새 지문 스크롤 위치 복원
+        requestAnimationFrame(() => {
+            if (passageScrollRef.current) {
+                passageScrollRef.current.scrollTop = scrollPositions.current[currentPassageIdx] || 0;
+            }
+        });
     }, [currentPassageIdx]);
+
+    // 스크롤 위치 저장
+    const handlePassageScroll = () => {
+        if (passageScrollRef.current) {
+            scrollPositions.current[currentPassageIdx] = passageScrollRef.current.scrollTop;
+        }
+    };
 
     const currentPassage = passages[currentPassageIdx];
     const progress = Math.round(((currentPassageIdx) / passages.length) * 100);
+    const totalQuestions = passages.reduce((sum, p) => sum + p.questions.length, 0);
+    const answeredCount = Object.keys(answers).length;
+
+    // 타이머 포맷
+    const formatTime = (sec: number) => {
+        const m = Math.floor(sec / 60);
+        const s = sec % 60;
+        return `${m}:${s.toString().padStart(2, '0')}`;
+    };
+    const isTimeWarning = remainingSec !== null && remainingSec <= 120; // 2분 이하 경고
 
     // 학년별 테마 색상 (상위 컴포넌트에서 전달받거나 context로 관리하면 좋음, 일단 하드코딩)
     const themeColor = 'text-indigo-600';
@@ -59,7 +105,23 @@ const DiagnosticTest: React.FC<DiagnosticTestProps> = ({
                             </div>
                         </div>
                     </div>
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-3">
+                        {/* 문항 카운터 */}
+                        <span className="px-3 py-1.5 bg-gray-50 text-gray-600 rounded-xl text-xs font-bold flex items-center gap-1.5">
+                            <span className="material-symbols-outlined text-sm">edit_note</span>
+                            {answeredCount}/{totalQuestions}
+                        </span>
+                        {/* 타이머 */}
+                        {remainingSec !== null && (
+                            <span className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors ${
+                                isTimeWarning
+                                    ? 'bg-red-50 text-red-600 animate-pulse'
+                                    : 'bg-indigo-50 text-indigo-600'
+                            }`}>
+                                <span className="material-symbols-outlined text-sm">timer</span>
+                                {formatTime(remainingSec)}
+                            </span>
+                        )}
                         <span className="hidden md:inline-block px-3 py-1 bg-indigo-50 text-indigo-600 rounded-lg text-xs font-bold">
                             AI 출제 위원: Google Gemini
                         </span>
@@ -74,7 +136,7 @@ const DiagnosticTest: React.FC<DiagnosticTestProps> = ({
                     {/* Left: Passage (Mobile: Tab 1) */}
                     <div className={`flex flex-col transition-all duration-300 ${mobileTab === 'passage' ? 'flex' : 'hidden lg:flex'}`}>
                         <div className="bg-white lg:rounded-[2.5rem] shadow-sm border border-gray-100 flex flex-col relative group">
-                            <div className="p-6 lg:p-10 pb-32 lg:pb-10 overflow-y-auto custom-scrollbar">
+                            <div ref={passageScrollRef} onScroll={handlePassageScroll} className="p-6 lg:p-10 pb-32 lg:pb-10 overflow-y-auto custom-scrollbar">
                                 <div className="prose prose-lg max-w-none">
                                     <h2 className="text-2xl font-black text-navy mb-8 leading-snug">{currentPassage?.title}</h2>
                                     <div className="text-[17px] md:text-[19px] leading-[2.2] text-gray-700 font-serif tracking-wide whitespace-pre-line">

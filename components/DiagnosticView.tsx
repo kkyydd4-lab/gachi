@@ -217,26 +217,36 @@ const DiagnosticView: React.FC<DiagnosticViewProps> = ({ user, onComplete, onCan
         const pastSessions = await SessionService.getSessionsByUser(user.id);
         const usedSessionIds = new Set(pastSessions.map(s => s.learningSessionId).filter(Boolean));
 
-        // 3. Find first unused session
+        // 3. Load all assets for this grade group
+        const allAssets = await AssetService.getApprovedAssets(userGradeGroup);
+
+        let sessionAssets: Asset[] = [];
+
+        // 4. Try session-based delivery first
         const currentSession = approvedSessions.find(s => !usedSessionIds.has(s.sessionId)) || approvedSessions[0];
 
-        if (!currentSession) {
-          alert("준비된 학습 차시가 없습니다. 관리자에게 문의하세요.");
-          onCancel();
-          return;
+        if (currentSession) {
+          console.log(`[Session Delivery] Selected: ${currentSession.title}`);
+          setCurrentSessionId(currentSession.sessionId);
+
+          sessionAssets = currentSession.assetIds
+            .map(id => allAssets.find(a => a.assetId === id))
+            .filter(Boolean) as Asset[];
         }
 
-        console.log(`[Session Delivery] Selected: ${currentSession.title}`);
-        setCurrentSessionId(currentSession.sessionId);
-
-        // 4. Load all assets for this session
-        const allAssets = await AssetService.getApprovedAssets(userGradeGroup);
-        const sessionAssets = currentSession.assetIds
-          .map(id => allAssets.find(a => a.assetId === id))
-          .filter(Boolean) as Asset[];
+        // 5. Fallback: 세션이 없거나 세션의 asset을 못 찾으면 asset에서 직접 로딩
+        if (sessionAssets.length === 0 && allAssets.length > 0) {
+          console.log(`[Direct Asset Delivery] No session found, loading ${allAssets.length} assets directly`);
+          // 기존에 사용한 asset 제외하고 최대 4개 선택
+          const pastAssetIds = new Set(
+            pastSessions.flatMap(s => s.assetIds || [])
+          );
+          const unusedAssets = allAssets.filter(a => !pastAssetIds.has(a.assetId));
+          sessionAssets = (unusedAssets.length > 0 ? unusedAssets : allAssets).slice(0, 4);
+        }
 
         if (sessionAssets.length === 0) {
-          alert("차시 정보를 불러오는 데 실패했습니다.");
+          alert("준비된 학습 차시가 없습니다. 관리자에게 문의하세요.");
           onCancel();
           return;
         }

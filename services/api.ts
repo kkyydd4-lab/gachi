@@ -267,16 +267,20 @@ export const AssetService = {
 
   async getApprovedAssets(gradeGroup: GradeGroupType): Promise<Asset[]> {
     try {
+      // status가 APPROVED인 것과 status 필드가 없는 기존 데이터 모두 포함
       const q = query(
         collection(db, ASSETS_COLLECTION),
-        where('gradeGroup', '==', gradeGroup),
-        where('status', '==', 'APPROVED')
+        where('gradeGroup', '==', gradeGroup)
       );
       const querySnapshot = await getDocs(q);
       const assets: Asset[] = [];
 
       querySnapshot.forEach((doc) => {
-        assets.push({ ...doc.data(), assetId: doc.id } as Asset);
+        const data = doc.data();
+        // REJECTED가 아닌 모든 asset 포함 (status 없음 = 기존 데이터 = 사용 가능)
+        if (data.status !== 'REJECTED') {
+          assets.push({ ...data, assetId: doc.id } as Asset);
+        }
       });
 
       return assets;
@@ -612,11 +616,13 @@ export const LearningSessionService = {
     try {
       const q = query(
         collection(db, LEARNING_SESSIONS_COLLECTION),
-        where('gradeGroup', '==', gradeGroup),
-        where('status', '==', 'APPROVED')
+        where('gradeGroup', '==', gradeGroup)
       );
       const querySnapshot = await getDocs(q);
-      return querySnapshot.docs.map(doc => doc.data() as LearningSession);
+      // ARCHIVED가 아닌 모든 세션 포함 (status 없음 = 기존 데이터 = 사용 가능)
+      return querySnapshot.docs
+        .map(doc => doc.data() as LearningSession)
+        .filter(s => s.status !== 'ARCHIVED');
     } catch (error) {
       console.error('Get approved learning sessions error:', error);
       return [];

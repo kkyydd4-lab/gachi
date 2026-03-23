@@ -58,7 +58,20 @@ export const AuthService = {
       const adminPw = import.meta.env.VITE_ADMIN_PW;
 
       if (adminId && adminPw && normalizedId === adminId && password.trim() === adminPw) {
-        return {
+        // Firebase Auth 세션도 생성 (Firestore 접근 권한 필요)
+        const adminEmail = toEmail(adminId);
+        try {
+          await signInWithEmailAndPassword(auth, adminEmail, adminPw);
+        } catch {
+          // Auth에 계정이 없으면 자동 생성 후 로그인
+          try {
+            await createUserWithEmailAndPassword(auth, adminEmail, adminPw);
+          } catch {
+            // 이미 존재하지만 비밀번호 불일치 등 — 무시하고 진행
+          }
+        }
+
+        const adminUser: UserAccount = {
           id: adminId,
           password: '',
           name: '관리자',
@@ -70,6 +83,21 @@ export const AuthService = {
           signupDate: new Date().toISOString(),
           isAdmin: true
         } as UserAccount;
+
+        // Firestore에 admin 프로필도 저장 (uid 기반)
+        if (auth.currentUser) {
+          try {
+            const adminDoc = await getDoc(doc(db, USERS_COLLECTION, auth.currentUser.uid));
+            if (!adminDoc.exists()) {
+              await setDoc(doc(db, USERS_COLLECTION, auth.currentUser.uid), {
+                ...adminUser,
+                uid: auth.currentUser.uid
+              });
+            }
+          } catch { /* ignore */ }
+        }
+
+        return adminUser;
       }
 
       // Firebase Auth 로그인

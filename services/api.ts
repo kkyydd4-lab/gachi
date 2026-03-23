@@ -51,8 +51,29 @@ export const AuthService = {
 
   async login(id: string, password: string): Promise<UserAccount | null> {
     try {
-      // Firebase Auth 로그인 (관리자 포함 모든 사용자 동일 경로)
-      const email = toEmail(id.trim().toLowerCase());
+      const normalizedId = id.trim().toLowerCase();
+
+      // 관리자 계정 체크 (환경변수 기반 — 추후 Firebase Custom Claims로 전환 예정)
+      const adminId = import.meta.env.VITE_ADMIN_ID;
+      const adminPw = import.meta.env.VITE_ADMIN_PW;
+
+      if (adminId && adminPw && normalizedId === adminId && password.trim() === adminPw) {
+        return {
+          id: adminId,
+          password: '',
+          name: '관리자',
+          role: 'ADMIN',
+          academyId: 'ADMIN',
+          school: '관리 본부',
+          grade: '-',
+          phone: '010-0000-0000',
+          signupDate: new Date().toISOString(),
+          isAdmin: true
+        } as UserAccount;
+      }
+
+      // Firebase Auth 로그인
+      const email = toEmail(normalizedId);
 
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
 

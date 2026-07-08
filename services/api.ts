@@ -1,5 +1,5 @@
 // Firebase 기반 API 서비스
-import { UserAccount, Asset, AdminConfig, GradeGroupType, TestSession, PostTestSurvey, Academy, GradeCurriculumConfig, LearningSession, LearningSessionStatus } from '../types';
+import { UserAccount, Asset, AdminConfig, GradeGroupType, TestSession, PostTestSurvey, Academy, GradeCurriculumConfig, LearningSession, LearningSessionStatus, ConsultationRequest } from '../types';
 import { auth, db } from './firebase';
 import {
   signInWithEmailAndPassword,
@@ -218,7 +218,7 @@ export const AuthService = {
     }
   },
 
-  // 관리자/선생님용: 모든 사용자 가져오기
+  // 관리자용: 모든 사용자 가져오기 (전체 학원 대상 — ADMIN 전용)
   async getAllUsers(): Promise<UserAccount[]> {
     try {
       const querySnapshot = await getDocs(collection(db, USERS_COLLECTION));
@@ -233,6 +233,23 @@ export const AuthService = {
       return users;
     } catch (error) {
       console.error('Get all users error:', error);
+      return [];
+    }
+  },
+
+  // 선생님용: 소속 학원의 사용자만 서버 사이드 필터링으로 조회
+  // (전체 컬렉션을 내려받아 클라이언트에서 필터링하던 방식은 타 학원 학생 정보 유출 위험이 있어 대체됨)
+  async getUsersByAcademy(academyId: string, role?: UserAccount['role']): Promise<UserAccount[]> {
+    try {
+      const clauses = [where('academyId', '==', academyId)];
+      if (role) clauses.push(where('role', '==', role));
+
+      const q = query(collection(db, USERS_COLLECTION), ...clauses);
+      const querySnapshot = await getDocs(q);
+
+      return querySnapshot.docs.map((doc) => ({ ...doc.data(), uid: doc.id } as UserAccount));
+    } catch (error) {
+      console.error('Get users by academy error:', error);
       return [];
     }
   },
@@ -254,6 +271,19 @@ export const AuthService = {
     }
   },
 
+
+  // 선생님용: 학생의 월간 리포트에 표시될 코멘트 저장 (상담 모드에서 작성)
+  async updateTestResultNote(studentUid: string, note: string): Promise<boolean> {
+    try {
+      await updateDoc(doc(db, USERS_COLLECTION, studentUid), {
+        'testResult.teacherNote': note
+      });
+      return true;
+    } catch (error) {
+      console.error('Update test result note error:', error);
+      return false;
+    }
+  },
 
   // 관리자용: 사용자 삭제
   async deleteUser(uid: string): Promise<boolean> {
@@ -636,6 +666,70 @@ export const CurriculumService = {
     } catch (error) {
       console.error('Get all curriculum configs error:', error);
       return [];
+    }
+  }
+};
+
+// --- Consultation Service (학부모 상담 신청) ---
+const CONSULTATION_REQUESTS_COLLECTION = 'consultation_requests';
+
+export const ConsultationService = {
+  // 학생/학부모가 리포트 화면에서 상담을 신청
+  async requestConsultation(student: UserAccount): Promise<boolean> {
+    try {
+      if (!student.uid) throw new Error('Student uid is missing');
+
+      const request: ConsultationRequest = {
+        id: crypto.randomUUID(),
+        studentUid: student.uid,
+        studentName: student.name,
+        academyId: student.academyId || 'UNASSIGNED',
+        status: 'PENDING',
+        requestedAt: new Date().toISOString()
+      };
+
+      await setDoc(doc(db, CONSULTATION_REQUESTS_COLLECTION, request.id), request);
+      return true;
+    } catch (error) {
+      console.error('Request consultation error:', error);
+      return false;
+    }
+  },
+
+  // 관리자용: 전체 학원의 상담 요청 조회 (가맹 운영 대시보드)
+  async getAllRequests(): Promise<ConsultationRequest[]> {
+    try {
+      const snapshot = await getDocs(collection(db, CONSULTATION_REQUESTS_COLLECTION));
+      return snapshot.docs.map(d => d.data() as ConsultationRequest);
+    } catch (error) {
+      console.error('Get all consultation requests error:', error);
+      return [];
+    }
+  },
+
+  // 선생님용: 우리 학원의 대기 중인 상담 요청 조회
+  async getPendingRequests(academyId: string): Promise<ConsultationRequest[]> {
+    try {
+      const q = query(
+        collection(db, CONSULTATION_REQUESTS_COLLECTION),
+        where('academyId', '==', academyId),
+        where('status', '==', 'PENDING')
+      );
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(d => d.data() as ConsultationRequest);
+    } catch (error) {
+      console.error('Get pending consultation requests error:', error);
+      return [];
+    }
+  },
+
+  async markResolved(requestId: string): Promise<boolean> {
+    try {
+      await updateDoc(doc(db, CONSULTATION_REQUESTS_COLLECTION, requestId), { status: 'DONE' });
+      return true;
+    } catch (error) {
+      console.error('Resolve consultation request error:', error);
+      return false;
     }
   }
 };

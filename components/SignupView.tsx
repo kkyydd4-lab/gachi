@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { UserAccount } from '../types';
 import { AuthService, AcademyService } from '../services/api';
+import { getGradeSegment } from '../data/gradeSegments';
 
 interface SignupViewProps {
   onBack: () => void;
@@ -239,6 +240,19 @@ const SignupView: React.FC<SignupViewProps> = ({ onBack }) => {
                   <option>중등 3학년</option>
                 </select>
               </div>
+
+              {(() => {
+                const segment = getGradeSegment(formData.grade);
+                if (!segment) return null;
+                return (
+                  <div className="bg-primary/5 border border-primary/10 rounded-xl p-4 text-sm">
+                    <p className="text-navy font-bold mb-1">{segment.rangeLabel} 학부모님이 가장 많이 하시는 고민</p>
+                    <p className="text-gray-500">
+                      "{segment.concern}" — 가치인의 <span className="text-primary font-bold">{segment.product}</span>으로 함께 준비해요.
+                    </p>
+                  </div>
+                );
+              })()}
 
               <div className="flex flex-col">
                 <p className="text-[#111418] text-sm font-bold pb-2">학부모 연락처 <span className="text-red-500">*</span></p>

@@ -82,6 +82,9 @@ const AdminHeader: React.FC<AdminHeaderProps> = ({
                     <button onClick={() => setTab('academy')} className={`px-4 py-2 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${tab === 'academy' ? 'bg-gray-600 text-white shadow-lg' : 'text-white/40 hover:text-white hover:bg-white/10'}`}>
                         학원
                     </button>
+                    <button onClick={() => setTab('ops')} className={`px-4 py-2 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${tab === 'ops' ? 'bg-gray-600 text-white shadow-lg' : 'text-white/40 hover:text-white hover:bg-white/10'}`}>
+                        가맹 운영
+                    </button>
                 </div>
             </div>
         </header>

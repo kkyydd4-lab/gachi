@@ -49,6 +49,18 @@ export interface TestResult {
     generatedAt: string;
     wrongAnswers?: WrongAnswerRecord[];
     prescription?: Prescription; // 처방 결과 추가
+    teacherNote?: string; // 선생님이 남긴 월간 리포트용 코멘트 (상담 모드에서 작성)
+}
+
+export type ConsultationRequestStatus = 'PENDING' | 'DONE';
+
+export interface ConsultationRequest {
+    id: string;
+    studentUid: string;
+    studentName: string;
+    academyId: string;
+    status: ConsultationRequestStatus;
+    requestedAt: string;
 }
 
 export type UserRole = 'STUDENT' | 'TEACHER' | 'ADMIN';

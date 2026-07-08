@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { AdminConfig, UserAccount, GradeGroupType, Asset, Academy } from '../types';
 import { AssetService, ConfigService, AuthService, CloudService, AcademyService, CurriculumService } from '../services/api';
 import { generateContent } from '../services/gemini';
-import { useConfig, useUsers, useAssets, useAcademies, useUpdateAssetStatus, useUpdateAsset, useDeleteUser, useUpdateUser, useCreateAcademy, useSaveConfig, useLearningSessions, useUpdateLearningSessionStatus, useDeleteLearningSession } from '../hooks/useQueries';
+import { useConfig, useUsers, useAssets, useAcademies, useUpdateAssetStatus, useUpdateAsset, useDeleteUser, useUpdateUser, useCreateAcademy, useSaveConfig, useLearningSessions, useUpdateLearningSessionStatus, useDeleteLearningSession, useConsultationRequests } from '../hooks/useQueries';
 import AdminAnalytics from './AdminAnalytics';
 
 // Sub-components
@@ -12,6 +12,7 @@ import GenerateTab from './admin/GenerateTab';
 import ReviewTab from './admin/ReviewTab';
 import UsersTab from './admin/UsersTab';
 import AcademyTab from './admin/AcademyTab';
+import AcademyOpsTab from './admin/AcademyOpsTab';
 import SettingsModal from './admin/SettingsModal';
 import UserEditModal from './admin/UserEditModal';
 
@@ -47,8 +48,9 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
   const { data: assets = [], refetch: refetchAssets } = useAssets();
   const { data: academies = [], refetch: refetchAcademies } = useAcademies();
   const { data: learningSessions = [], refetch: refetchLearningSessions } = useLearningSessions();
+  const { data: consultationRequests = [] } = useConsultationRequests();
 
-  const [tab, setTab] = useState<'dashboard' | 'generate' | 'review' | 'users' | 'analytics' | 'academy'>('dashboard');
+  const [tab, setTab] = useState<'dashboard' | 'generate' | 'review' | 'users' | 'analytics' | 'academy' | 'ops'>('dashboard');
 
   // Local config state for editing (synced with fetched config)
   const [config, setConfig] = useState<AdminConfig>({
@@ -333,6 +335,13 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
             newAcademyRegion={newAcademyRegion}
             setNewAcademyRegion={setNewAcademyRegion}
             handleCreateAcademy={handleCreateAcademy}
+          />
+        )}
+        {tab === 'ops' && (
+          <AcademyOpsTab
+            academies={academies}
+            users={users}
+            requests={consultationRequests}
           />
         )}
       </main>

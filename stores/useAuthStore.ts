@@ -19,6 +19,8 @@ export const useAuthStore = create<AuthState>((set) => ({
         localStorage.setItem('literacy_session', JSON.stringify(user));
     },
     logout: () => {
+        // Firebase Auth 세션도 함께 종료 (이전에는 로컬 상태만 지워 재로그인 시 이전 세션이 남아있는 문제가 있었음)
+        AuthService.logout().catch((e) => console.error('Firebase logout error:', e));
         set({ user: null });
         localStorage.removeItem('literacy_session');
     },

@@ -1,7 +1,8 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { ViewState, UserAccount, WrongAnswerRecord, PostTestSurvey } from '../types';
-import { SessionService } from '../services/api';
+import { SessionService, ConsultationService, AuthService } from '../services/api';
 import { PostTestSurveyForm } from './MicroSurvey';
+import { getGradeSegment } from '../data/gradeSegments';
 import {
   Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
@@ -13,12 +14,35 @@ interface ReportViewProps {
   setView: (view: ViewState) => void;
   onLogout: () => void;
   onStartTest: () => void;
+  isTeacherView?: boolean; // 선생님 상담 모드에서 렌더링될 때 true (코멘트 작성 가능)
 }
 
 const LOGO_URL = "https://lh3.googleusercontent.com/u/0/d/16S6A8l-NgtMiOb8mjf1-hLv0AgxnX-dc=w1000-h1000";
 
-const ReportView: React.FC<ReportViewProps> = ({ user, onLogout, onStartTest }) => {
+const ReportView: React.FC<ReportViewProps> = ({ user, onLogout, onStartTest, isTeacherView = false }) => {
   const hasResult = !!user?.testResult;
+  const bookSectionRef = useRef<HTMLDivElement>(null);
+
+  // 월간 리포트: 선생님 코멘트 (상담 모드에서 작성 → 학부모 화면에 노출)
+  const [teacherNote, setTeacherNote] = useState(user?.testResult?.teacherNote || '');
+  const [noteStatus, setNoteStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+
+  const handleSaveNote = async () => {
+    if (!user?.uid) return;
+    setNoteStatus('saving');
+    const ok = await AuthService.updateTestResultNote(user.uid, teacherNote);
+    setNoteStatus(ok ? 'saved' : 'idle');
+  };
+
+  // 상담 신청 (학부모/학생용)
+  const [consultState, setConsultState] = useState<'idle' | 'submitting' | 'submitted' | 'error'>('idle');
+
+  const handleRequestConsultation = async () => {
+    if (!user || consultState === 'submitting' || consultState === 'submitted') return;
+    setConsultState('submitting');
+    const ok = await ConsultationService.requestConsultation(user);
+    setConsultState(ok ? 'submitted' : 'error');
+  };
 
   // MVP v2: 설문 상태 관리
   const [showSurvey, setShowSurvey] = useState(true);
@@ -175,6 +199,20 @@ const ReportView: React.FC<ReportViewProps> = ({ user, onLogout, onStartTest }) 
   };
 
   const expertOpinion = generateExpertOpinion();
+  const gradeSegment = getGradeSegment(user?.grade || '');
+
+  // 월간 리포트 항목 6: "글쓰기에서 좋아진 점" — 직전 회차 대비 향상된 역량 (이력이 있을 때만)
+  const improvedAreas = (() => {
+    if (!user?.testHistory || user.testHistory.length < 2) return null;
+    const prev = user.testHistory[user.testHistory.length - 2];
+    const curr = user.testHistory[user.testHistory.length - 1];
+    return curr.competencies
+      .filter(c => {
+        const prevScore = prev.competencies.find(p => p.label === c.label)?.score;
+        return prevScore !== undefined && c.score > prevScore;
+      })
+      .map(c => c.label);
+  })();
 
   return (
     <div className="flex min-h-screen w-full bg-background-light font-display">
@@ -191,19 +229,28 @@ const ReportView: React.FC<ReportViewProps> = ({ user, onLogout, onStartTest }) 
 
         <nav className="flex-1 space-y-3">
           {[
-            { icon: 'dashboard', label: '성장 대시보드', active: true, onClick: undefined },
-            { icon: 'quiz', label: '문해력 평가', active: false, onClick: onStartTest },
-            { icon: 'auto_stories', label: 'AI 맞춤 도서', active: false, onClick: undefined },
-            { icon: 'edit_square', label: '수행평가 가이드', active: false, onClick: undefined },
-            { icon: 'settings', label: '계정 설정', active: false, onClick: undefined },
+            { icon: 'dashboard', label: '성장 대시보드', active: true, onClick: undefined, comingSoon: false },
+            { icon: 'quiz', label: '문해력 평가', active: false, onClick: onStartTest, comingSoon: false },
+            {
+              icon: 'auto_stories', label: 'AI 맞춤 도서', active: false, comingSoon: false,
+              onClick: hasResult ? () => bookSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }) : undefined
+            },
+            { icon: 'edit_square', label: '수행평가 가이드', active: false, onClick: undefined, comingSoon: true },
+            { icon: 'settings', label: '계정 설정', active: false, onClick: undefined, comingSoon: true },
           ].map(item => (
             <div
               key={item.label}
-              onClick={item.onClick}
-              className={`flex items-center gap-4 p-4 rounded-2xl cursor-pointer transition-all ${item.active ? 'bg-primary/10 text-primary font-black shadow-sm' : 'text-gray-400 hover:bg-gray-50'}`}
+              onClick={item.comingSoon ? undefined : item.onClick}
+              className={`flex items-center gap-4 p-4 rounded-2xl transition-all ${item.comingSoon
+                ? 'text-gray-300 cursor-not-allowed'
+                : `cursor-pointer ${item.active ? 'bg-primary/10 text-primary font-black shadow-sm' : 'text-gray-400 hover:bg-gray-50'}`
+                }`}
             >
               <span className="material-symbols-outlined">{item.icon}</span>
               <span className="text-base">{item.label}</span>
+              {item.comingSoon && (
+                <span className="ml-auto text-[10px] font-black bg-gray-100 text-gray-400 px-2 py-1 rounded-full">준비중</span>
+              )}
             </div>
           ))}
         </nav>
@@ -418,12 +465,12 @@ const ReportView: React.FC<ReportViewProps> = ({ user, onLogout, onStartTest }) 
                   )}
                 </div>
 
-                {/* 전문가 종합의견 (Retention Strategy UI) */}
+                {/* 이달의 성장 리포트 (월간 자동 리포트 — 재등록 이유를 시스템으로 만드는 핵심 화면) */}
                 {expertOpinion && (
                   <div className="mt-12 pt-12 border-t border-gray-100">
                     <h4 className="text-xl font-black text-navy mb-6 flex items-center gap-3">
-                      <span className="material-symbols-outlined text-secondary text-3xl">psychology</span>
-                      전문가 분석 리포트
+                      <span className="material-symbols-outlined text-secondary text-3xl">calendar_month</span>
+                      이달의 성장 리포트
                     </h4>
 
                     <div className="bg-gradient-to-br from-navy/5 to-primary/5 rounded-3xl p-8 space-y-6">
@@ -440,6 +487,38 @@ const ReportView: React.FC<ReportViewProps> = ({ user, onLogout, onStartTest }) 
                         <p className="text-navy font-medium leading-relaxed whitespace-pre-wrap">{expertOpinion.overallAssessment}</p>
                       </div>
 
+                      {/* 1. 아이가 표현한 생각 (선생님 코멘트) */}
+                      <div className="bg-white rounded-2xl p-6 border border-gray-100">
+                        <p className="text-sm text-gray-400 font-bold mb-2 flex items-center gap-2">
+                          <span className="material-symbols-outlined text-indigo-400">forum</span>
+                          아이가 말로 표현한 생각
+                        </p>
+                        {isTeacherView ? (
+                          <div className="space-y-3">
+                            <textarea
+                              value={teacherNote}
+                              onChange={(e) => { setTeacherNote(e.target.value); setNoteStatus('idle'); }}
+                              placeholder="상담 중 학생이 이야기한 내용, 인상 깊었던 표현 등을 기록해주세요."
+                              className="w-full min-h-[80px] p-3 rounded-xl border border-gray-200 text-navy text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/30"
+                            />
+                            <div className="flex items-center gap-3">
+                              <button
+                                onClick={handleSaveNote}
+                                disabled={noteStatus === 'saving'}
+                                className="px-4 py-2 bg-navy text-white rounded-xl text-sm font-bold hover:bg-navy/90 transition-colors disabled:opacity-50"
+                              >
+                                {noteStatus === 'saving' ? '저장 중...' : '저장'}
+                              </button>
+                              {noteStatus === 'saved' && <span className="text-xs text-primary font-bold">저장되었습니다</span>}
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-navy font-medium leading-relaxed">
+                            {teacherNote || '이번 상담에서 선생님이 기록한 내용이 아직 없어요. 다음 상담 후 채워질 예정입니다.'}
+                          </p>
+                        )}
+                      </div>
+
                       <div className="flex flex-wrap gap-3">
                         {expertOpinion.strengths.length > 0 && (
                           <div className="flex items-center gap-2 bg-primary/10 text-primary px-4 py-2 rounded-full text-sm font-bold">
@@ -451,9 +530,24 @@ const ReportView: React.FC<ReportViewProps> = ({ user, onLogout, onStartTest }) 
                         {expertOpinion.careZones.length > 0 && (
                           <div className="flex items-center gap-2 bg-red-50 text-red-500 px-4 py-2 rounded-full text-sm font-bold border border-red-100 shadow-sm">
                             <span className="material-symbols-outlined text-lg">medical_services</span>
-                            집중 케어 필요: {expertOpinion.careZones.join(', ')}
+                            아직 부족한 점: {expertOpinion.careZones.join(', ')}
                           </div>
                         )}
+                      </div>
+
+                      {/* 2. 글쓰기에서 좋아진 점 */}
+                      <div className="bg-white rounded-2xl p-6 border border-gray-100">
+                        <p className="text-sm text-gray-400 font-bold mb-2 flex items-center gap-2">
+                          <span className="material-symbols-outlined text-primary">auto_awesome</span>
+                          글쓰기에서 좋아진 점
+                        </p>
+                        <p className="text-navy font-medium leading-relaxed">
+                          {improvedAreas && improvedAreas.length > 0
+                            ? `지난 평가 대비 ${improvedAreas.join(', ')} 영역 점수가 향상되었습니다.`
+                            : expertOpinion.strengths.length > 0
+                              ? `${expertOpinion.strengths.join(', ')} 영역에서 이미 안정적인 실력을 보이고 있습니다.`
+                              : '다음 평가부터 이전 회차와 비교한 성장 포인트를 확인할 수 있어요.'}
+                        </p>
                       </div>
 
                       {/* Potential Score Visualization */}
@@ -479,10 +573,11 @@ const ReportView: React.FC<ReportViewProps> = ({ user, onLogout, onStartTest }) 
                         </p>
                       </div>
 
+                      {/* 3. 가정에서 도와줄 한 가지 */}
                       <div className="bg-white rounded-2xl p-6 border border-gray-100">
                         <p className="text-sm text-gray-400 font-bold mb-2 flex items-center gap-2">
-                          <span className="material-symbols-outlined text-yellow-500">lightbulb</span>
-                          학부모님 가이드 (Action Plan)
+                          <span className="material-symbols-outlined text-yellow-500">home</span>
+                          가정에서 도와줄 한 가지
                         </p>
                         <p className="text-navy font-medium leading-relaxed">{expertOpinion.recommendation}</p>
                       </div>
@@ -490,9 +585,9 @@ const ReportView: React.FC<ReportViewProps> = ({ user, onLogout, onStartTest }) 
                   </div>
                 )}
 
-                {/* 맞춤형 처방 (Prescription) - Phase 9 */}
+                {/* 4·5. 추천 도서 & 다음 달 목표 (Prescription) */}
                 {user?.testResult?.prescription && (
-                  <div className="mt-12 pt-12 border-t border-gray-100">
+                  <div ref={bookSectionRef} className="mt-12 pt-12 border-t border-gray-100">
                     <h4 className="text-xl font-black text-navy mb-6 flex items-center gap-3">
                       <span className="material-symbols-outlined text-green-500 text-3xl">medication</span>
                       AI 맞춤 처방전
@@ -503,7 +598,7 @@ const ReportView: React.FC<ReportViewProps> = ({ user, onLogout, onStartTest }) 
                       <div className="bg-green-50/50 rounded-3xl p-8 border border-green-100">
                         <p className="text-sm text-green-600 font-bold mb-4 flex items-center gap-2">
                           <span className="material-symbols-outlined">auto_stories</span>
-                          이달의 추천 도서
+                          이번 달 추천 도서
                         </p>
                         <div className="space-y-4">
                           {user.testResult.prescription.recommendedBooks.map((book, idx) => (
@@ -516,11 +611,11 @@ const ReportView: React.FC<ReportViewProps> = ({ user, onLogout, onStartTest }) 
                         </div>
                       </div>
 
-                      {/* 미션 */}
+                      {/* 다음 달 목표 */}
                       <div className="bg-blue-50/50 rounded-3xl p-8 border border-blue-100 flex flex-col">
                         <p className="text-sm text-blue-600 font-bold mb-4 flex items-center gap-2">
                           <span className="material-symbols-outlined">flag</span>
-                          이번 주 성장 미션
+                          다음 달 수업 목표
                         </p>
                         <div className="bg-white p-6 rounded-2xl border border-blue-100 shadow-sm flex-1 flex flex-col justify-center text-center">
                           <span className="material-symbols-outlined text-blue-400 text-5xl mb-4 mx-auto">task_alt</span>
@@ -748,10 +843,19 @@ const ReportView: React.FC<ReportViewProps> = ({ user, onLogout, onStartTest }) 
                   <p className="text-white/50 text-[11px] font-black tracking-[0.3em] uppercase mb-4">Guidance Solution</p>
                   <h4 className="text-3xl font-black mb-6 leading-tight">정밀 대면 상담<br />신청하기</h4>
                   <p className="text-white/80 font-medium mb-10 text-lg leading-relaxed">
-                    진단 결과를 바탕으로 학생에게 딱 맞는 초정밀 맞춤형 커리큘럼을 제안해 드립니다.
+                    {gradeSegment
+                      ? `"${gradeSegment.concern}" 고민, 진단 결과를 바탕으로 ${gradeSegment.product} 방향의 맞춤 커리큘럼을 제안해 드립니다.`
+                      : '진단 결과를 바탕으로 학생에게 딱 맞는 초정밀 맞춤형 커리큘럼을 제안해 드립니다.'}
                   </p>
-                  <button className="bg-white text-secondary font-black py-5 rounded-2xl text-xl shadow-lg hover:scale-[1.02] transition-all">
-                    지금 신청하기
+                  <button
+                    onClick={handleRequestConsultation}
+                    disabled={consultState === 'submitting' || consultState === 'submitted'}
+                    className="bg-white text-secondary font-black py-5 rounded-2xl text-xl shadow-lg hover:scale-[1.02] transition-all disabled:opacity-70 disabled:hover:scale-100"
+                  >
+                    {consultState === 'submitting' ? '신청 중...'
+                      : consultState === 'submitted' ? '신청 완료! 곧 연락드릴게요'
+                        : consultState === 'error' ? '오류가 발생했어요, 다시 시도'
+                          : '지금 신청하기'}
                   </button>
                 </div>
 

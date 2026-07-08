@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { AssetService, AuthService, AcademyService, ConfigService, LearningSessionService } from '../services/api';
+import { AssetService, AuthService, AcademyService, ConfigService, LearningSessionService, ConsultationService } from '../services/api';
 import { UserAccount, Asset, Academy, AdminConfig, GradeGroupType, AssetStatus, LearningSessionStatus } from '../types';
 
 // Keys
@@ -9,6 +9,7 @@ export const QUERY_KEYS = {
     academies: ['academies'] as const,
     config: ['config'] as const,
     learningSessions: ['learningSessions'] as const,
+    consultationRequests: ['consultationRequests'] as const,
 };
 
 // Hooks
@@ -113,6 +114,13 @@ export const useSaveConfig = () => {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: QUERY_KEYS.config });
         },
+    });
+};
+
+export const useConsultationRequests = () => {
+    return useQuery({
+        queryKey: QUERY_KEYS.consultationRequests,
+        queryFn: () => ConsultationService.getAllRequests(),
     });
 };
 

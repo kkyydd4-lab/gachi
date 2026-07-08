@@ -1,0 +1,101 @@
+rules_version = '2';
+
+// 이 프로젝트에는 이전까지 Firestore 보안 규칙이 전혀 버전관리되지 않았음.
+// 클라이언트가 academyId로 서버 사이드 필터링 쿼리를 하더라도(services/api.ts의
+// AuthService.getUsersByAcademy), 이 규칙 파일이 없으면 누구든 Firebase SDK로
+// users 컬렉션 전체를 직접 읽어갈 수 있음 — 실제 접근 제어는 이 파일이 담당한다.
+//
+// 배포 방법: firebase deploy --only firestore:rules
+// (firebase-tools 설치 및 `firebase use <project-id>` 로 프로젝트 연결 필요)
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // 호출자 자신의 users 문서 (role/academyId 판단용)
+    function callerProfile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && callerProfile().role == 'ADMIN';
+    }
+
+    function isTeacherOfAcademy(academyId) {
+      return isSignedIn()
+        && callerProfile().role == 'TEACHER'
+        && academyId != null
+        && callerProfile().academyId == academyId;
+    }
+
+    // --- users: 학생/선생님/관리자 프로필 ---
+    match /users/{userId} {
+      allow read: if isSignedIn() && (
+        request.auth.uid == userId ||
+        isAdmin() ||
+        isTeacherOfAcademy(resource.data.academyId)
+      );
+      // 본인 uid로만 최초 생성 가능 (가입 흐름)
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      // 본인 또는 관리자만 수정 가능 (선생님은 학생 정보를 직접 고칠 수 없음)
+      allow update: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    // --- academies: 가입 시 코드 검증에 필요, 목록/이름만 읽기 허용 ---
+    match /academies/{academyId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // --- assets / curriculum_configs / learning_sessions: 콘텐츠, 관리자만 쓰기 ---
+    match /assets/{assetId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /curriculum_configs/{configId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /learning_sessions/{sessionId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // --- test_sessions: 진단 세션 로그, 본인/관리자만 접근 ---
+    match /test_sessions/{sessionId} {
+      allow read: if isSignedIn() && (isAdmin() || resource.data.userId == request.auth.uid);
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && (isAdmin() || resource.data.userId == request.auth.uid);
+      allow delete: if isAdmin();
+    }
+
+    // --- config: 관리자 설정 문서 ---
+    match /config/{configId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // --- consultation_requests: 학생/학부모의 상담 신청 ---
+    match /consultation_requests/{requestId} {
+      allow read: if isSignedIn() && (
+        isAdmin() ||
+        isTeacherOfAcademy(resource.data.academyId) ||
+        resource.data.studentUid == request.auth.uid
+      );
+      allow create: if isSignedIn() && request.resource.data.studentUid == request.auth.uid;
+      allow update: if isSignedIn() && (isAdmin() || isTeacherOfAcademy(resource.data.academyId));
+      allow delete: if isAdmin();
+    }
+
+    // 그 외 컬렉션은 기본 차단
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { UserAccount, TestResult, GradeGroupType, Asset } from '../types';
-import { SessionService, AssetService } from '../services/api';
+import { UserAccount, TestResult, GradeGroupType, Asset, ConsultationRequest } from '../types';
+import { SessionService, AssetService, ConsultationService } from '../services/api';
 import ReportView from './ReportView'; // 상담 모드에서 재사용
 
 interface TeacherDashboardProps {
@@ -16,20 +16,19 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ user, onLogout }) =
     const [selectedStudent, setSelectedStudent] = useState<UserAccount | null>(null);
     const [students, setStudents] = useState<UserAccount[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [pendingRequests, setPendingRequests] = useState<ConsultationRequest[]>([]);
 
     useEffect(() => {
         const loadStudents = async () => {
             setIsLoading(true);
             try {
-                const allUsers = await AuthService.getAllUsers();
-                // 내 학원 ID와 일치하는 학생만 필터링 (선생님에게 academyId가 없다면 모두 보이지 않음)
-                // MVP: academyId가 없는 경우 테스트용으로 모든 학생을 보여줄 수도 있지만, 원칙대로 필터링
-                const myStudents = allUsers.filter(u =>
-                    u.role === 'STUDENT' && u.academyId === user.academyId
-                );
-
-                // 만약 선생님이 academyId가 없다면(초기 데이터), 테스트를 위해 demo 모드로 전환 가능
-                // 여기서는 일단 필터링만 적용
+                // academyId가 없는 선생님 계정은 어느 학원에도 속하지 않으므로 조회하지 않음
+                if (!user.academyId) {
+                    setStudents([]);
+                    return;
+                }
+                // 서버 사이드에서 내 학원 학생만 조회 (타 학원 데이터가 클라이언트로 전송되지 않음)
+                const myStudents = await AuthService.getUsersByAcademy(user.academyId, 'STUDENT');
                 setStudents(myStudents);
             } catch (e) {
                 console.error("Failed to load students", e);
@@ -42,6 +41,28 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ user, onLogout }) =
             loadStudents();
         }
     }, [user.academyId, user.role]);
+
+    useEffect(() => {
+        const loadRequests = async () => {
+            if (!user.academyId) return;
+            const requests = await ConsultationService.getPendingRequests(user.academyId);
+            setPendingRequests(requests);
+        };
+
+        if (user.role === 'TEACHER') {
+            loadRequests();
+        }
+    }, [user.academyId, user.role]);
+
+    const openConsultationFromRequest = async (req: ConsultationRequest) => {
+        const student = students.find(s => s.uid === req.studentUid);
+        if (student) {
+            setSelectedStudent(student);
+            setActiveTab('consultation');
+        }
+        await ConsultationService.markResolved(req.id);
+        setPendingRequests(prev => prev.filter(r => r.id !== req.id));
+    };
 
     // Care Zone 계산 (60점 미만 항목)
     const getCareZones = (result?: TestResult) => {
@@ -99,6 +120,7 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ user, onLogout }) =
                     setView={() => { }}
                     onLogout={() => { }}
                     onStartTest={() => { }}
+                    isTeacherView
                 />
             </div>
         );
@@ -195,6 +217,32 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ user, onLogout }) =
                                 </p>
                             </div>
                         </div>
+
+                        {/* 학부모 상담 신청 (ReportView "지금 신청하기" 버튼에서 발생) */}
+                        {pendingRequests.length > 0 && (
+                            <div className="bg-white rounded-3xl p-8 border border-gray-100 shadow-sm">
+                                <h3 className="text-lg font-black text-navy mb-6 flex items-center gap-2">
+                                    <span className="material-symbols-outlined text-secondary">support_agent</span>
+                                    새로운 상담 신청 ({pendingRequests.length})
+                                </h3>
+                                <div className="space-y-3">
+                                    {pendingRequests.map(req => (
+                                        <div key={req.id} className="flex items-center justify-between p-4 bg-secondary/5 border border-secondary/10 rounded-2xl">
+                                            <div>
+                                                <p className="font-bold text-navy">{req.studentName}</p>
+                                                <p className="text-xs text-gray-400">{new Date(req.requestedAt).toLocaleString()} 신청</p>
+                                            </div>
+                                            <button
+                                                onClick={() => openConsultationFromRequest(req)}
+                                                className="text-secondary font-bold text-sm bg-white border border-gray-200 px-3 py-1.5 rounded-lg hover:bg-secondary hover:text-white hover:border-secondary transition-all shadow-sm"
+                                            >
+                                                상담 시작
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
 
                         {/* Action Items (Care Zone) */}
                         <div className="bg-white rounded-3xl p-8 border border-gray-100 shadow-sm">

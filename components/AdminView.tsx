@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { AdminConfig, UserAccount, GradeGroupType, Asset, Academy } from '../types';
 import { AssetService, ConfigService, AuthService, CloudService, AcademyService, CurriculumService } from '../services/api';
 import { generateContent } from '../services/gemini';
-import { useConfig, useUsers, useAssets, useAcademies, useUpdateAssetStatus, useUpdateAsset, useDeleteUser, useUpdateUser, useCreateAcademy, useSaveConfig, useLearningSessions, useUpdateLearningSessionStatus, useDeleteLearningSession, useConsultationRequests } from '../hooks/useQueries';
+import { useConfig, useUsers, useAssets, useAcademies, useUpdateAssetStatus, useUpdateAsset, useDeleteUser, useUpdateUser, useCreateAcademy, useSaveConfig, useLearningSessions, useUpdateLearningSessionStatus, useDeleteLearningSession, useConsultationRequests, useManuals, useSaveManual, useDeleteManual } from '../hooks/useQueries';
 import AdminAnalytics from './AdminAnalytics';
 
 // Sub-components
@@ -13,11 +13,13 @@ import ReviewTab from './admin/ReviewTab';
 import UsersTab from './admin/UsersTab';
 import AcademyTab from './admin/AcademyTab';
 import AcademyOpsTab from './admin/AcademyOpsTab';
+import ManualsTab from './admin/ManualsTab';
 import SettingsModal from './admin/SettingsModal';
 import UserEditModal from './admin/UserEditModal';
 
 interface AdminViewProps {
   onBack: () => void;
+  adminName?: string;
 }
 
 // Gemini AI는 services/gemini.ts를 통해 사용
@@ -38,7 +40,7 @@ const rubricGuides: Record<string, { desc: string, logic: string, icon: string, 
   '비판적 이해': { desc: '타당성 및 가치 판단', logic: '주장의 타당성, 근거 신뢰성, 편향성 평가 및 대안', icon: 'gavel', color: 'bg-red-500' },
 };
 
-const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
+const AdminView: React.FC<AdminViewProps> = ({ onBack, adminName = '관리자' }) => {
   /* 
    * TanStack Query Hooks 
    * - Phase 2-1: Replacing local state/useEffect with React Query
@@ -49,8 +51,11 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
   const { data: academies = [], refetch: refetchAcademies } = useAcademies();
   const { data: learningSessions = [], refetch: refetchLearningSessions } = useLearningSessions();
   const { data: consultationRequests = [] } = useConsultationRequests();
+  const { data: manuals = [] } = useManuals();
+  const saveManualMutation = useSaveManual();
+  const deleteManualMutation = useDeleteManual();
 
-  const [tab, setTab] = useState<'dashboard' | 'generate' | 'review' | 'users' | 'analytics' | 'academy' | 'ops'>('dashboard');
+  const [tab, setTab] = useState<'dashboard' | 'generate' | 'review' | 'users' | 'analytics' | 'academy' | 'ops' | 'manuals'>('dashboard');
 
   // Local config state for editing (synced with fetched config)
   const [config, setConfig] = useState<AdminConfig>({
@@ -342,6 +347,14 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
             academies={academies}
             users={users}
             requests={consultationRequests}
+          />
+        )}
+        {tab === 'manuals' && (
+          <ManualsTab
+            manuals={manuals}
+            onSave={(manual) => saveManualMutation.mutate(manual)}
+            onDelete={(id) => deleteManualMutation.mutate(id)}
+            currentAdminName={adminName}
           />
         )}
       </main>

@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { AssetService, AuthService, AcademyService, ConfigService, LearningSessionService, ConsultationService } from '../services/api';
-import { UserAccount, Asset, Academy, AdminConfig, GradeGroupType, AssetStatus, LearningSessionStatus } from '../types';
+import { AssetService, AuthService, AcademyService, ConfigService, LearningSessionService, ConsultationService, ManualService } from '../services/api';
+import { UserAccount, Asset, Academy, AdminConfig, GradeGroupType, AssetStatus, LearningSessionStatus, OperationManual } from '../types';
 
 // Keys
 export const QUERY_KEYS = {
@@ -10,6 +10,7 @@ export const QUERY_KEYS = {
     config: ['config'] as const,
     learningSessions: ['learningSessions'] as const,
     consultationRequests: ['consultationRequests'] as const,
+    manuals: ['manuals'] as const,
 };
 
 // Hooks
@@ -121,6 +122,33 @@ export const useConsultationRequests = () => {
     return useQuery({
         queryKey: QUERY_KEYS.consultationRequests,
         queryFn: () => ConsultationService.getAllRequests(),
+    });
+};
+
+export const useManuals = () => {
+    return useQuery({
+        queryKey: QUERY_KEYS.manuals,
+        queryFn: () => ManualService.getAll(),
+    });
+};
+
+export const useSaveManual = () => {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (manual: OperationManual) => ManualService.save(manual),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: QUERY_KEYS.manuals });
+        },
+    });
+};
+
+export const useDeleteManual = () => {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (id: string) => ManualService.delete(id),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: QUERY_KEYS.manuals });
+        },
     });
 };
 

@@ -267,21 +267,21 @@ const ReportView: React.FC<ReportViewProps> = ({ user, onLogout, onStartTest, is
       {/* Main Content */}
       <main className="flex-1 p-6 md:p-12 lg:p-20 max-w-7xl mx-auto w-full overflow-y-auto custom-scrollbar">
         {/* Profile Section */}
-        <section className="bg-white rounded-[3rem] p-10 mb-10 border border-gray-100 shadow-sm flex flex-col md:flex-row items-center gap-8">
+        <section className="bg-white rounded-[3rem] p-6 sm:p-10 mb-10 border border-gray-100 shadow-sm flex flex-col lg:flex-row items-center gap-6 lg:gap-8">
           <div
-            className="rounded-full h-28 w-28 md:h-36 md:w-36 border-8 border-primary/5 shadow-inner bg-cover bg-center shrink-0"
+            className="rounded-full h-24 w-24 sm:h-28 sm:w-28 lg:h-36 lg:w-36 border-8 border-primary/5 shadow-inner bg-cover bg-center shrink-0"
             style={{ backgroundImage: `url(https://picsum.photos/seed/${user?.id || 'user'}/200/200)` }}
           />
-          <div className="text-center md:text-left flex-1">
-            <h2 className="text-3xl md:text-4xl font-black text-navy mb-3 tracking-tight">안녕하세요, {user?.name || '가치인'} 학생!</h2>
-            <p className="text-gray-400 text-lg font-bold">{user?.school} · {user?.grade}</p>
+          <div className="text-center lg:text-left flex-1 min-w-0 w-full lg:w-auto">
+            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black text-navy mb-3 tracking-tight break-keep">안녕하세요, {user?.name || '가치인'} 학생!</h2>
+            <p className="text-gray-400 text-base sm:text-lg font-bold break-keep">{user?.school} · {user?.grade}</p>
           </div>
-          <div className="flex gap-4">
-            <div className="bg-navy/5 px-6 py-4 rounded-3xl text-center min-w-[140px]">
+          <div className="flex gap-4 w-full lg:w-auto justify-center flex-wrap shrink-0">
+            <div className="bg-navy/5 px-6 py-4 rounded-3xl text-center flex-1 lg:flex-none min-w-[120px]">
               <p className="text-navy/40 text-[10px] font-black tracking-widest uppercase mb-1">Diagnosis</p>
               <p className="text-navy font-black text-xl">{hasResult ? '분석완료' : '진단대기'}</p>
             </div>
-            <div className="bg-primary/5 px-6 py-4 rounded-3xl text-center min-w-[140px]">
+            <div className="bg-primary/5 px-6 py-4 rounded-3xl text-center flex-1 lg:flex-none min-w-[120px]">
               <p className="text-primary/60 text-[10px] font-black tracking-widest uppercase mb-1">Core Level</p>
               <p className="text-navy font-black text-xl">{hasResult ? user.testResult?.level : '-'}</p>
             </div>

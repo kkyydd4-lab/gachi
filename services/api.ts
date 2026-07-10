@@ -1,5 +1,5 @@
 // Firebase 기반 API 서비스
-import { UserAccount, Asset, AdminConfig, GradeGroupType, TestSession, PostTestSurvey, Academy, GradeCurriculumConfig, LearningSession, LearningSessionStatus, ConsultationRequest } from '../types';
+import { UserAccount, Asset, AdminConfig, GradeGroupType, TestSession, PostTestSurvey, Academy, GradeCurriculumConfig, LearningSession, LearningSessionStatus, ConsultationRequest, OperationManual } from '../types';
 import { auth, db } from './firebase';
 import {
   signInWithEmailAndPassword,
@@ -729,6 +729,41 @@ export const ConsultationService = {
       return true;
     } catch (error) {
       console.error('Resolve consultation request error:', error);
+      return false;
+    }
+  }
+};
+
+// --- Manual Service (운영 매뉴얼 — 가맹사업 상황별 대응 문서) ---
+const MANUALS_COLLECTION = 'manuals';
+
+export const ManualService = {
+  async getAll(): Promise<OperationManual[]> {
+    try {
+      const snapshot = await getDocs(collection(db, MANUALS_COLLECTION));
+      return snapshot.docs.map(d => d.data() as OperationManual);
+    } catch (error) {
+      console.error('Get manuals error:', error);
+      return [];
+    }
+  },
+
+  async save(manual: OperationManual): Promise<boolean> {
+    try {
+      await setDoc(doc(db, MANUALS_COLLECTION, manual.id), manual);
+      return true;
+    } catch (error) {
+      console.error('Save manual error:', error);
+      return false;
+    }
+  },
+
+  async delete(id: string): Promise<boolean> {
+    try {
+      await deleteDoc(doc(db, MANUALS_COLLECTION, id));
+      return true;
+    } catch (error) {
+      console.error('Delete manual error:', error);
       return false;
     }
   }

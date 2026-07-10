@@ -65,6 +65,50 @@ const UserEditModal: React.FC<UserEditModalProps> = ({
                             ))}
                         </select>
                     </div>
+                    {editedUser.role === 'STUDENT' && (
+                        <div className="border-t border-gray-100 pt-4 mt-2 space-y-4">
+                            <p className="text-xs font-black text-gray-400 uppercase tracking-wider">등록 과정 (연간 성장 프로그램)</p>
+                            <div>
+                                <label className="block text-sm font-bold text-navy mb-1">과정명</label>
+                                <input
+                                    type="text"
+                                    value={editedUser.program?.name || ''}
+                                    onChange={e => setEditedUser({
+                                        ...editedUser,
+                                        program: { ...editedUser.program, name: e.target.value, startDate: editedUser.program?.startDate || new Date().toISOString().slice(0, 10) }
+                                    })}
+                                    placeholder="예: 초3·4 글쓰기 기초 완성 과정"
+                                    className="w-full p-3 rounded-xl border border-gray-200"
+                                />
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-sm font-bold text-navy mb-1">시작일</label>
+                                    <input
+                                        type="date"
+                                        value={editedUser.program?.startDate || ''}
+                                        onChange={e => setEditedUser({
+                                            ...editedUser,
+                                            program: { name: editedUser.program?.name || '', ...editedUser.program, startDate: e.target.value }
+                                        })}
+                                        className="w-full p-3 rounded-xl border border-gray-200"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-bold text-navy mb-1">다음 갱신일</label>
+                                    <input
+                                        type="date"
+                                        value={editedUser.program?.nextRenewalDate || ''}
+                                        onChange={e => setEditedUser({
+                                            ...editedUser,
+                                            program: { name: editedUser.program?.name || '', startDate: editedUser.program?.startDate || new Date().toISOString().slice(0, 10), ...editedUser.program, nextRenewalDate: e.target.value }
+                                        })}
+                                        className="w-full p-3 rounded-xl border border-gray-200"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    )}
                     {editedUser.role === 'TEACHER' && (
                         <div className="flex items-center gap-2 mt-4">
                             <input

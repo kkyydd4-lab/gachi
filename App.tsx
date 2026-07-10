@@ -86,7 +86,7 @@ const App: React.FC = () => {
 
         <Route path="/report" element={currentUser ? <ReportView user={currentUser} currentView="REPORT" setView={(view: any) => navigate(view === 'DIAGNOSTIC' ? '/diagnostic' : '/report')} onLogout={handleLogout} onStartTest={() => navigate('/diagnostic')} /> : <Navigate to="/login" />} />
 
-        <Route path="/admin" element={currentUser && currentUser.role === 'ADMIN' ? <AdminView onBack={handleLogout} /> : <Navigate to={currentUser ? "/" : "/login"} />} />
+        <Route path="/admin" element={currentUser && currentUser.role === 'ADMIN' ? <AdminView onBack={handleLogout} adminName={currentUser.name} /> : <Navigate to={currentUser ? "/" : "/login"} />} />
 
         <Route path="/teacher" element={currentUser && currentUser.role === 'TEACHER' ? <TeacherDashboard user={currentUser} onLogout={handleLogout} /> : <Navigate to={currentUser ? "/" : "/login"} />} />
 

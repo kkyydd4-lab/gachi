@@ -81,6 +81,12 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // --- manuals: 가맹 운영 매뉴얼 (본사가 작성, 선생님/원장이 열람) ---
+    match /manuals/{manualId} {
+      allow read: if isSignedIn() && (isAdmin() || callerProfile().role == 'TEACHER');
+      allow write: if isAdmin();
+    }
+
     // --- consultation_requests: 학생/학부모의 상담 신청 ---
     match /consultation_requests/{requestId} {
       allow read: if isSignedIn() && (

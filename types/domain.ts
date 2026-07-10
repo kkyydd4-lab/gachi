@@ -63,7 +63,32 @@ export interface ConsultationRequest {
     requestedAt: string;
 }
 
+// --- 운영 매뉴얼 (가맹사업 "구조화" 대응: 상황별 대응 문서) ---
+export type ManualCategory =
+    | '신규 상담 대응'
+    | '학부모 불만 대응'
+    | '모집·홍보'
+    | '재등록 관리'
+    | '교사 관리'
+    | '지점 운영';
+
+export interface OperationManual {
+    id: string;
+    category: ManualCategory;
+    title: string;       // 예: "재등록 상담 스크립트"
+    content: string;     // 본문 (텍스트/마크다운)
+    updatedAt: string;
+    updatedBy: string;   // 작성/수정한 관리자 이름
+}
+
 export type UserRole = 'STUDENT' | 'TEACHER' | 'ADMIN';
+
+// 연간 성장 프로그램 등록 정보 (ABS 관점: "한 달 수업료"가 아니라 "등록된 과정"으로 재등록을 추적하기 위한 데이터)
+export interface ProgramEnrollment {
+    name: string;              // 예: "초3·4 글쓰기 기초 완성 과정"
+    startDate: string;
+    nextRenewalDate?: string;  // 다음 갱신(재등록) 예정일 — 실제 재등록률 계산의 기준
+}
 
 export interface UserAccount {
     id: string;
@@ -82,6 +107,7 @@ export interface UserAccount {
     isAcademyAdmin?: boolean; // 학원 관리자 여부
     uid?: string;       // Firebase Document ID (for updates/deletes)
     parentPhone?: string; // 학부모 연락처
+    program?: ProgramEnrollment; // 등록된 연간 성장 프로그램 (학생)
 }
 
 export interface Question {

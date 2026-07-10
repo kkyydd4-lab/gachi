@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { UserAccount, TestResult, GradeGroupType, Asset, ConsultationRequest } from '../types';
-import { SessionService, AssetService, ConsultationService } from '../services/api';
+import { UserAccount, TestResult, GradeGroupType, Asset, ConsultationRequest, OperationManual, ManualCategory } from '../types';
+import { SessionService, AssetService, ConsultationService, ManualService } from '../services/api';
 import ReportView from './ReportView'; // 상담 모드에서 재사용
 
 interface TeacherDashboardProps {
@@ -11,12 +11,16 @@ interface TeacherDashboardProps {
 // Mock Data removed
 import { AuthService } from '../services/api';
 
+const MANUAL_CATEGORIES: ManualCategory[] = ['신규 상담 대응', '학부모 불만 대응', '모집·홍보', '재등록 관리', '교사 관리', '지점 운영'];
+
 const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ user, onLogout }) => {
-    const [activeTab, setActiveTab] = useState<'briefing' | 'students' | 'consultation'>('briefing');
+    const [activeTab, setActiveTab] = useState<'briefing' | 'students' | 'consultation' | 'manuals'>('briefing');
     const [selectedStudent, setSelectedStudent] = useState<UserAccount | null>(null);
     const [students, setStudents] = useState<UserAccount[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [pendingRequests, setPendingRequests] = useState<ConsultationRequest[]>([]);
+    const [manuals, setManuals] = useState<OperationManual[]>([]);
+    const [openManualId, setOpenManualId] = useState<string | null>(null);
 
     useEffect(() => {
         const loadStudents = async () => {
@@ -53,6 +57,17 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ user, onLogout }) =
             loadRequests();
         }
     }, [user.academyId, user.role]);
+
+    useEffect(() => {
+        const loadManuals = async () => {
+            const all = await ManualService.getAll();
+            setManuals(all);
+        };
+
+        if (user.role === 'TEACHER' && activeTab === 'manuals' && manuals.length === 0) {
+            loadManuals();
+        }
+    }, [user.role, activeTab]);
 
     const openConsultationFromRequest = async (req: ConsultationRequest) => {
         const student = students.find(s => s.uid === req.studentUid);
@@ -154,6 +169,13 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ user, onLogout }) =
                     >
                         <span className="material-symbols-outlined">groups</span>
                         학생 관리
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('manuals')}
+                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors font-bold ${activeTab === 'manuals' ? 'bg-primary text-white shadow-lg shadow-primary/30' : 'text-gray-400 hover:bg-gray-50'}`}
+                    >
+                        <span className="material-symbols-outlined">menu_book</span>
+                        운영 매뉴얼
                     </button>
                 </nav>
 
@@ -360,6 +382,50 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ user, onLogout }) =
                                 </tbody>
                             </table>
                         </div>
+                    </div>
+                )}
+
+                {activeTab === 'manuals' && (
+                    <div className="max-w-4xl mx-auto space-y-8">
+                        <header className="mb-2">
+                            <h2 className="text-2xl font-black text-navy mb-2">운영 매뉴얼 📖</h2>
+                            <p className="text-gray-500">본사에서 정리한 상황별 대응 가이드입니다.</p>
+                        </header>
+
+                        {MANUAL_CATEGORIES.map(category => {
+                            const items = manuals.filter(m => m.category === category);
+                            if (items.length === 0) return null;
+                            return (
+                                <div key={category}>
+                                    <h3 className="text-sm font-black text-gray-400 uppercase tracking-wider mb-3">{category}</h3>
+                                    <div className="space-y-3">
+                                        {items.map(m => {
+                                            const isOpen = openManualId === m.id;
+                                            return (
+                                                <div key={m.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                                                    <button
+                                                        onClick={() => setOpenManualId(isOpen ? null : m.id)}
+                                                        className="w-full flex items-center justify-between p-5 text-left"
+                                                    >
+                                                        <span className="font-bold text-navy">{m.title}</span>
+                                                        <span className="material-symbols-outlined text-gray-400">{isOpen ? 'expand_less' : 'expand_more'}</span>
+                                                    </button>
+                                                    {isOpen && (
+                                                        <div className="px-5 pb-5 text-sm text-gray-600 leading-relaxed whitespace-pre-wrap border-t border-gray-100 pt-4">
+                                                            {m.content || '(내용 없음)'}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            );
+                        })}
+
+                        {manuals.length === 0 && (
+                            <p className="text-center text-gray-400 py-16">아직 등록된 운영 매뉴얼이 없습니다.</p>
+                        )}
                     </div>
                 )}
             </main>

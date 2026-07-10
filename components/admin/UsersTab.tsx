@@ -120,44 +120,63 @@ const UsersTab: React.FC<UsersTabProps> = ({
                                 <th className="pb-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">학교/학년</th>
                                 <th className="pb-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">소속 학원</th>
                                 <th className="pb-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">학부모 연락처</th>
-                                <th className="pb-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">진단일</th>
+                                <th className="pb-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">등록 과정 · 갱신일</th>
                                 <th className="pb-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">최근 점수</th>
                                 <th className="pb-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right pr-4">관리</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50">
-                            {users.filter(u => !u.isAdmin && u.role !== 'TEACHER').map(u => (
-                                <tr key={u.id} className="hover:bg-gray-50/50 transition-colors">
-                                    <td className="py-4 font-bold text-navy pl-4">{u.name}</td>
-                                    <td className="py-4 text-sm text-gray-500">{u.school} {u.grade}</td>
-                                    <td className="py-4 text-sm text-gray-500">{u.signupDate}</td>
-                                    <td className="py-4">
-                                        {u.testResult ? (
-                                            <span className="bg-primary/10 text-primary px-3 py-1 rounded-full text-xs font-black">{u.testResult.totalScore}점</span>
-                                        ) : (
-                                            <span className="text-gray-300 text-xs font-bold italic">No Data</span>
-                                        )}
-                                    </td>
-                                    <td className="py-4 text-right pr-4">
-                                        <div className="flex items-center justify-end gap-2">
-                                            <button
-                                                onClick={() => openEditModal(u)}
-                                                className="w-8 h-8 rounded-full bg-gray-50 hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-blue-500 transition-colors"
-                                            >
-                                                <span className="material-symbols-outlined text-sm">edit</span>
-                                            </button>
-                                            <button
-                                                onClick={() => handleDeleteUser(u)}
-                                                className="w-8 h-8 rounded-full bg-gray-50 hover:bg-red-50 flex items-center justify-center text-gray-400 hover:text-red-500 transition-colors"
-                                            >
-                                                <span className="material-symbols-outlined text-sm">delete</span>
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
+                            {users.filter(u => !u.isAdmin && u.role !== 'TEACHER').map(u => {
+                                const renewal = u.program?.nextRenewalDate;
+                                const daysLeft = renewal ? Math.ceil((new Date(renewal).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : null;
+                                return (
+                                    <tr key={u.id} className="hover:bg-gray-50/50 transition-colors">
+                                        <td className="py-4 font-bold text-navy pl-4">{u.name}</td>
+                                        <td className="py-4 text-sm text-gray-500">{u.school} {u.grade}</td>
+                                        <td className="py-4 text-sm text-navy font-bold">
+                                            {academies.find(a => a.id === u.academyId)?.name || <span className="text-gray-400 font-normal">-</span>}
+                                        </td>
+                                        <td className="py-4 text-sm text-gray-500">{u.parentPhone || '-'}</td>
+                                        <td className="py-4 text-sm text-gray-500">
+                                            {u.program?.name ? (
+                                                <div>
+                                                    <p className="text-navy font-bold">{u.program.name}</p>
+                                                    {renewal && (
+                                                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${daysLeft !== null && daysLeft <= 7 ? 'bg-red-50 text-red-500' : 'text-gray-400'}`}>
+                                                            {renewal} 갱신{daysLeft !== null && daysLeft <= 7 ? ` (D-${daysLeft})` : ''}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            ) : <span className="text-gray-300">미등록</span>}
+                                        </td>
+                                        <td className="py-4">
+                                            {u.testResult ? (
+                                                <span className="bg-primary/10 text-primary px-3 py-1 rounded-full text-xs font-black">{u.testResult.totalScore}점</span>
+                                            ) : (
+                                                <span className="text-gray-300 text-xs font-bold italic">No Data</span>
+                                            )}
+                                        </td>
+                                        <td className="py-4 text-right pr-4">
+                                            <div className="flex items-center justify-end gap-2">
+                                                <button
+                                                    onClick={() => openEditModal(u)}
+                                                    className="w-8 h-8 rounded-full bg-gray-50 hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-blue-500 transition-colors"
+                                                >
+                                                    <span className="material-symbols-outlined text-sm">edit</span>
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDeleteUser(u)}
+                                                    className="w-8 h-8 rounded-full bg-gray-50 hover:bg-red-50 flex items-center justify-center text-gray-400 hover:text-red-500 transition-colors"
+                                                >
+                                                    <span className="material-symbols-outlined text-sm">delete</span>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
                             {users.filter(u => !u.isAdmin && u.role !== 'TEACHER').length === 0 && (
-                                <tr><td colSpan={4} className="py-8 text-center text-gray-300 font-bold">등록된 학생이 없습니다.</td></tr>
+                                <tr><td colSpan={7} className="py-8 text-center text-gray-300 font-bold">등록된 학생이 없습니다.</td></tr>
                             )}
                         </tbody>
                     </table>

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { AdminConfig, UserAccount, GradeGroupType, Asset, Academy } from '../types';
 import { AssetService, ConfigService, AuthService, CloudService, AcademyService, CurriculumService } from '../services/api';
 import { generateContent } from '../services/gemini';
-import { useConfig, useUsers, useAssets, useAcademies, useUpdateAssetStatus, useUpdateAsset, useDeleteUser, useUpdateUser, useCreateAcademy, useSaveConfig, useLearningSessions, useUpdateLearningSessionStatus, useDeleteLearningSession, useConsultationRequests, useManuals, useSaveManual, useDeleteManual } from '../hooks/useQueries';
+import { useConfig, useUsers, useAssets, useAcademies, useUpdateAssetStatus, useUpdateAsset, useDeleteUser, useUpdateUser, useCreateAcademy, useSaveConfig, useLearningSessions, useUpdateLearningSessionStatus, useDeleteLearningSession, useConsultationRequests, useManuals, useSaveManual, useDeleteManual, useQualityChecks, useSaveQualityCheck } from '../hooks/useQueries';
 import AdminAnalytics from './AdminAnalytics';
 
 // Sub-components
@@ -54,6 +54,8 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack, adminName = '관리자' }
   const { data: manuals = [] } = useManuals();
   const saveManualMutation = useSaveManual();
   const deleteManualMutation = useDeleteManual();
+  const { data: qualityChecks = [] } = useQualityChecks();
+  const saveQualityCheckMutation = useSaveQualityCheck();
 
   const [tab, setTab] = useState<'dashboard' | 'generate' | 'review' | 'users' | 'analytics' | 'academy' | 'ops' | 'manuals'>('dashboard');
 
@@ -329,6 +331,9 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack, adminName = '관리자' }
             academies={academies}
             openEditModal={openEditModal}
             handleDeleteUser={handleDeleteUser}
+            qualityChecks={qualityChecks}
+            onSaveQualityCheck={(check) => saveQualityCheckMutation.mutate(check)}
+            adminName={adminName}
           />
         )}
         {tab === 'analytics' && <AdminAnalytics isVisible={tab === 'analytics'} />}
@@ -347,6 +352,7 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack, adminName = '관리자' }
             academies={academies}
             users={users}
             requests={consultationRequests}
+            qualityChecks={qualityChecks}
           />
         )}
         {tab === 'manuals' && (

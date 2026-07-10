@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { AssetService, AuthService, AcademyService, ConfigService, LearningSessionService, ConsultationService, ManualService } from '../services/api';
-import { UserAccount, Asset, Academy, AdminConfig, GradeGroupType, AssetStatus, LearningSessionStatus, OperationManual } from '../types';
+import { AssetService, AuthService, AcademyService, ConfigService, LearningSessionService, ConsultationService, ManualService, TeacherQualityService } from '../services/api';
+import { UserAccount, Asset, Academy, AdminConfig, GradeGroupType, AssetStatus, LearningSessionStatus, OperationManual, TeacherQualityCheck } from '../types';
 
 // Keys
 export const QUERY_KEYS = {
@@ -11,6 +11,7 @@ export const QUERY_KEYS = {
     learningSessions: ['learningSessions'] as const,
     consultationRequests: ['consultationRequests'] as const,
     manuals: ['manuals'] as const,
+    qualityChecks: ['qualityChecks'] as const,
 };
 
 // Hooks
@@ -148,6 +149,23 @@ export const useDeleteManual = () => {
         mutationFn: (id: string) => ManualService.delete(id),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: QUERY_KEYS.manuals });
+        },
+    });
+};
+
+export const useQualityChecks = () => {
+    return useQuery({
+        queryKey: QUERY_KEYS.qualityChecks,
+        queryFn: () => TeacherQualityService.getAll(),
+    });
+};
+
+export const useSaveQualityCheck = () => {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (check: TeacherQualityCheck) => TeacherQualityService.save(check),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: QUERY_KEYS.qualityChecks });
         },
     });
 };

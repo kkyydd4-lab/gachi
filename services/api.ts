@@ -1,5 +1,5 @@
 // Firebase 기반 API 서비스
-import { UserAccount, Asset, AdminConfig, GradeGroupType, TestSession, PostTestSurvey, Academy, GradeCurriculumConfig, LearningSession, LearningSessionStatus, ConsultationRequest, OperationManual } from '../types';
+import { UserAccount, Asset, AdminConfig, GradeGroupType, TestSession, PostTestSurvey, Academy, GradeCurriculumConfig, LearningSession, LearningSessionStatus, ConsultationRequest, OperationManual, TeacherQualityCheck } from '../types';
 import { auth, db } from './firebase';
 import {
   signInWithEmailAndPassword,
@@ -121,7 +121,9 @@ export const AuthService = {
       const userDoc = await getDoc(doc(db, USERS_COLLECTION, userCredential.user.uid));
 
       if (userDoc.exists()) {
-        return userDoc.data() as UserAccount;
+        // uid를 반드시 함께 반환해야 함 — 없으면 이후 세션 동안(새로고침 전까지)
+        // user.uid를 참조하는 모든 기능(품질 점검 조회 등)이 조용히 빈 값으로 동작함
+        return { ...userDoc.data(), uid: userDoc.id } as UserAccount;
       }
 
       return null;
@@ -764,6 +766,44 @@ export const ManualService = {
       return true;
     } catch (error) {
       console.error('Delete manual error:', error);
+      return false;
+    }
+  }
+};
+
+// --- Teacher Quality Service (교사 품질 점검) ---
+const QUALITY_CHECKS_COLLECTION = 'teacher_quality_checks';
+
+export const TeacherQualityService = {
+  async getAll(): Promise<TeacherQualityCheck[]> {
+    try {
+      const snapshot = await getDocs(collection(db, QUALITY_CHECKS_COLLECTION));
+      return snapshot.docs.map(d => d.data() as TeacherQualityCheck);
+    } catch (error) {
+      console.error('Get quality checks error:', error);
+      return [];
+    }
+  },
+
+  async getByTeacher(teacherUid: string): Promise<TeacherQualityCheck[]> {
+    try {
+      const q = query(collection(db, QUALITY_CHECKS_COLLECTION), where('teacherUid', '==', teacherUid));
+      const snapshot = await getDocs(q);
+      return snapshot.docs
+        .map(d => d.data() as TeacherQualityCheck)
+        .sort((a, b) => b.checkedAt.localeCompare(a.checkedAt));
+    } catch (error) {
+      console.error('Get quality checks by teacher error:', error);
+      return [];
+    }
+  },
+
+  async save(check: TeacherQualityCheck): Promise<boolean> {
+    try {
+      await setDoc(doc(db, QUALITY_CHECKS_COLLECTION, check.id), check);
+      return true;
+    } catch (error) {
+      console.error('Save quality check error:', error);
       return false;
     }
   }

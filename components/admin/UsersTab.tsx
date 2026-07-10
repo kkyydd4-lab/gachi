@@ -1,19 +1,37 @@
-import React from 'react';
-import { UserAccount, Academy } from '../../types';
+import React, { useState } from 'react';
+import { UserAccount, Academy, TeacherQualityCheck, QUALITY_CHECK_CRITERIA } from '../../types';
+import TeacherQualityModal from './TeacherQualityModal';
 
 interface UsersTabProps {
     users: UserAccount[];
     academies: Academy[];
     openEditModal: (user: UserAccount) => void;
     handleDeleteUser: (user: UserAccount) => void;
+    qualityChecks?: TeacherQualityCheck[];
+    onSaveQualityCheck?: (check: TeacherQualityCheck) => void;
+    adminName?: string;
 }
+
+const averageScore = (check: TeacherQualityCheck) =>
+    QUALITY_CHECK_CRITERIA.reduce((sum, c) => sum + check.scores[c], 0) / QUALITY_CHECK_CRITERIA.length;
 
 const UsersTab: React.FC<UsersTabProps> = ({
     users,
     academies,
     openEditModal,
-    handleDeleteUser
+    handleDeleteUser,
+    qualityChecks = [],
+    onSaveQualityCheck,
+    adminName = '관리자'
 }) => {
+    const [qualityModalTeacher, setQualityModalTeacher] = useState<UserAccount | null>(null);
+
+    const latestCheckFor = (teacherUid?: string) => {
+        if (!teacherUid) return null;
+        const checks = qualityChecks.filter(c => c.teacherUid === teacherUid).sort((a, b) => b.checkedAt.localeCompare(a.checkedAt));
+        return checks[0] || null;
+    };
+
     return (
         <div className="space-y-8 animate-fade-in">
             {/* 1. 학원 현황 */}
@@ -65,11 +83,14 @@ const UsersTab: React.FC<UsersTabProps> = ({
                                 <th className="pb-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">소속 학원</th>
                                 <th className="pb-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">연락처</th>
                                 <th className="pb-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">가입일</th>
+                                <th className="pb-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">품질 점수</th>
                                 <th className="pb-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right pr-4">관리</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50">
-                            {users.filter(u => u.role === 'TEACHER').map(u => (
+                            {users.filter(u => u.role === 'TEACHER').map(u => {
+                                const latest = latestCheckFor(u.uid);
+                                return (
                                 <tr key={u.id} className="hover:bg-gray-50/50 transition-colors">
                                     <td className="py-4 font-bold text-navy pl-4 flex items-center gap-2">
                                         {u.name}
@@ -80,8 +101,22 @@ const UsersTab: React.FC<UsersTabProps> = ({
                                     </td>
                                     <td className="py-4 text-sm text-gray-500">{u.phone}</td>
                                     <td className="py-4 text-sm text-gray-500">{u.signupDate}</td>
+                                    <td className="py-4">
+                                        {latest ? (
+                                            <span className={`px-2.5 py-1 rounded-lg text-xs font-black ${averageScore(latest) < 3 ? 'bg-red-50 text-red-500' : 'bg-indigo-50 text-indigo-600'}`}>
+                                                {averageScore(latest).toFixed(1)}점
+                                            </span>
+                                        ) : <span className="text-gray-300 text-xs">점검 없음</span>}
+                                    </td>
                                     <td className="py-4 text-right pr-4">
                                         <div className="flex items-center justify-end gap-2">
+                                            <button
+                                                onClick={() => setQualityModalTeacher(u)}
+                                                className="w-8 h-8 rounded-full bg-gray-50 hover:bg-indigo-50 flex items-center justify-center text-gray-400 hover:text-indigo-500 transition-colors"
+                                                title="수업 품질 점검"
+                                            >
+                                                <span className="material-symbols-outlined text-sm">fact_check</span>
+                                            </button>
                                             <button
                                                 onClick={() => openEditModal(u)}
                                                 className="w-8 h-8 rounded-full bg-gray-50 hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-blue-500 transition-colors"
@@ -97,9 +132,10 @@ const UsersTab: React.FC<UsersTabProps> = ({
                                         </div>
                                     </td>
                                 </tr>
-                            ))}
+                                );
+                            })}
                             {users.filter(u => u.role === 'TEACHER').length === 0 && (
-                                <tr><td colSpan={4} className="py-8 text-center text-gray-300 font-bold">등록된 선생님이 없습니다.</td></tr>
+                                <tr><td colSpan={6} className="py-8 text-center text-gray-300 font-bold">등록된 선생님이 없습니다.</td></tr>
                             )}
                         </tbody>
                     </table>
@@ -182,6 +218,16 @@ const UsersTab: React.FC<UsersTabProps> = ({
                     </table>
                 </div>
             </div>
+
+            {qualityModalTeacher && (
+                <TeacherQualityModal
+                    teacher={qualityModalTeacher}
+                    history={qualityChecks.filter(c => c.teacherUid === qualityModalTeacher.uid).sort((a, b) => b.checkedAt.localeCompare(a.checkedAt))}
+                    adminName={adminName}
+                    onClose={() => setQualityModalTeacher(null)}
+                    onSave={(check) => onSaveQualityCheck?.(check)}
+                />
+            )}
         </div>
     );
 };

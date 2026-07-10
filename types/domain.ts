@@ -81,6 +81,21 @@ export interface OperationManual {
     updatedBy: string;   // 작성/수정한 관리자 이름
 }
 
+// --- 교사 품질 점검 (워터폴 2순위: 교사 품질 관리) ---
+export const QUALITY_CHECK_CRITERIA = ['수업 준비도', '피드백 충실도', '학생 소통', '진도 관리'] as const;
+export type QualityCheckCriterion = typeof QUALITY_CHECK_CRITERIA[number];
+
+export interface TeacherQualityCheck {
+    id: string;
+    teacherUid: string;
+    teacherName: string;
+    academyId: string;
+    scores: Record<QualityCheckCriterion, number>; // 각 1~5점
+    note?: string;
+    checkedAt: string;
+    checkedBy: string; // 점검한 관리자 이름
+}
+
 export type UserRole = 'STUDENT' | 'TEACHER' | 'ADMIN';
 
 // 연간 성장 프로그램 등록 정보 (ABS 관점: "한 달 수업료"가 아니라 "등록된 과정"으로 재등록을 추적하기 위한 데이터)

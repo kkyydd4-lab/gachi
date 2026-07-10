@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { UserAccount, TestResult, GradeGroupType, Asset, ConsultationRequest, OperationManual, ManualCategory } from '../types';
-import { SessionService, AssetService, ConsultationService, ManualService } from '../services/api';
+import { UserAccount, TestResult, GradeGroupType, Asset, ConsultationRequest, OperationManual, ManualCategory, TeacherQualityCheck, QUALITY_CHECK_CRITERIA } from '../types';
+import { SessionService, AssetService, ConsultationService, ManualService, TeacherQualityService } from '../services/api';
 import ReportView from './ReportView'; // 상담 모드에서 재사용
 
 interface TeacherDashboardProps {
@@ -21,6 +21,7 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ user, onLogout }) =
     const [pendingRequests, setPendingRequests] = useState<ConsultationRequest[]>([]);
     const [manuals, setManuals] = useState<OperationManual[]>([]);
     const [openManualId, setOpenManualId] = useState<string | null>(null);
+    const [myQualityChecks, setMyQualityChecks] = useState<TeacherQualityCheck[]>([]);
 
     useEffect(() => {
         const loadStudents = async () => {
@@ -68,6 +69,18 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ user, onLogout }) =
             loadManuals();
         }
     }, [user.role, activeTab]);
+
+    useEffect(() => {
+        const loadMyQualityChecks = async () => {
+            if (!user.uid) return;
+            const checks = await TeacherQualityService.getByTeacher(user.uid);
+            setMyQualityChecks(checks);
+        };
+
+        if (user.role === 'TEACHER') {
+            loadMyQualityChecks();
+        }
+    }, [user.uid, user.role]);
 
     const openConsultationFromRequest = async (req: ConsultationRequest) => {
         const student = students.find(s => s.uid === req.studentUid);
@@ -263,6 +276,28 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ user, onLogout }) =
                                         </div>
                                     ))}
                                 </div>
+                            </div>
+                        )}
+
+                        {/* 본사 수업 품질 피드백 */}
+                        {myQualityChecks.length > 0 && (
+                            <div className="bg-white rounded-3xl p-8 border border-gray-100 shadow-sm">
+                                <h3 className="text-lg font-black text-navy mb-6 flex items-center gap-2">
+                                    <span className="material-symbols-outlined text-indigo-500">fact_check</span>
+                                    본사 수업 품질 피드백
+                                    <span className="text-sm font-bold text-gray-400 ml-auto">{new Date(myQualityChecks[0].checkedAt).toLocaleDateString()}</span>
+                                </h3>
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                                    {QUALITY_CHECK_CRITERIA.map(c => (
+                                        <div key={c} className="bg-indigo-50/50 rounded-2xl p-4 text-center">
+                                            <p className="text-xs text-gray-400 font-bold mb-1">{c}</p>
+                                            <p className="text-2xl font-black text-indigo-600">{myQualityChecks[0].scores[c]}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                                {myQualityChecks[0].note && (
+                                    <p className="text-sm text-gray-600 bg-gray-50 rounded-xl p-4">{myQualityChecks[0].note}</p>
+                                )}
                             </div>
                         )}
 

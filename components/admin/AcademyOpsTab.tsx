@@ -1,11 +1,15 @@
 import React from 'react';
-import { Academy, UserAccount, ConsultationRequest } from '../../types';
+import { Academy, UserAccount, ConsultationRequest, TeacherQualityCheck, QUALITY_CHECK_CRITERIA } from '../../types';
 
 interface AcademyOpsTabProps {
     academies: Academy[];
     users: UserAccount[];
     requests: ConsultationRequest[];
+    qualityChecks?: TeacherQualityCheck[];
 }
+
+const checkAverage = (check: TeacherQualityCheck) =>
+    QUALITY_CHECK_CRITERIA.reduce((sum, c) => sum + check.scores[c], 0) / QUALITY_CHECK_CRITERIA.length;
 
 interface AcademyStats {
     academyId: string;
@@ -17,6 +21,7 @@ interface AcademyStats {
     retentionProxy: number | null; // 2회 이상 평가 완료 학생 비율 (프로그램 데이터 없을 때의 재등록 프록시)
     renewalSoon30d: number;        // 실제 등록 프로그램 기준 30일 내 갱신 예정 학생 수
     programTracked: number;        // 등록 프로그램이 입력된 학생 수 (실제 지표 신뢰도 참고용)
+    teacherQualityAvg: number | null; // 지점 교사들의 최근 품질 점검 평균 (1~5)
     pendingRequests: number;
     newSignups7d: number;
 }
@@ -24,7 +29,7 @@ interface AcademyStats {
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
-const buildStats = (academies: Academy[], users: UserAccount[], requests: ConsultationRequest[]): AcademyStats[] => {
+const buildStats = (academies: Academy[], users: UserAccount[], requests: ConsultationRequest[], qualityChecks: TeacherQualityCheck[]): AcademyStats[] => {
     // 학생/선생님을 소속 학원 코드(id)별로 그룹화. academyId가 없거나 등록된 학원과 매칭되지 않으면 "미배정"으로 취급.
     const groups = new Map<string, UserAccount[]>();
     users.forEach(u => {
@@ -59,6 +64,14 @@ const buildStats = (academies: Academy[], users: UserAccount[], requests: Consul
         const pendingRequests = requests.filter(r => r.academyId === academyId && r.status === 'PENDING').length;
         const newSignups7d = members.filter(m => now - new Date(m.signupDate).getTime() < SEVEN_DAYS_MS).length;
 
+        // 교사별 최신 점검 점수의 평균 (지점 단위 코칭 품질 지표)
+        const latestPerTeacher = teachers
+            .map(t => qualityChecks.filter(c => c.teacherUid === t.uid).sort((a, b) => b.checkedAt.localeCompare(a.checkedAt))[0])
+            .filter((c): c is TeacherQualityCheck => !!c);
+        const teacherQualityAvg = latestPerTeacher.length > 0
+            ? latestPerTeacher.reduce((sum, c) => sum + checkAverage(c), 0) / latestPerTeacher.length
+            : null;
+
         return {
             academyId,
             academyName,
@@ -69,6 +82,7 @@ const buildStats = (academies: Academy[], users: UserAccount[], requests: Consul
             retentionProxy,
             renewalSoon30d,
             programTracked,
+            teacherQualityAvg,
             pendingRequests,
             newSignups7d
         };
@@ -85,8 +99,8 @@ const buildStats = (academies: Academy[], users: UserAccount[], requests: Consul
     return stats.sort((a, b) => b.studentCount - a.studentCount);
 };
 
-const AcademyOpsTab: React.FC<AcademyOpsTabProps> = ({ academies, users, requests }) => {
-    const stats = buildStats(academies, users, requests);
+const AcademyOpsTab: React.FC<AcademyOpsTabProps> = ({ academies, users, requests, qualityChecks = [] }) => {
+    const stats = buildStats(academies, users, requests, qualityChecks);
     const totalPending = stats.reduce((sum, s) => sum + s.pendingRequests, 0);
 
     return (
@@ -107,13 +121,14 @@ const AcademyOpsTab: React.FC<AcademyOpsTabProps> = ({ academies, users, request
             </p>
 
             <div className="bg-white rounded-[2rem] shadow-sm border border-gray-100 overflow-x-auto">
-                <table className="w-full text-left min-w-[980px]">
+                <table className="w-full text-left min-w-[1100px]">
                     <thead className="bg-gray-50 border-b border-gray-100">
                         <tr>
                             <th className="p-6 text-xs font-black text-gray-400 uppercase">지점</th>
                             <th className="p-6 text-xs font-black text-gray-400 uppercase">학생/교사</th>
                             <th className="p-6 text-xs font-black text-gray-400 uppercase">평균 점수</th>
                             <th className="p-6 text-xs font-black text-gray-400 uppercase">집중 케어 비율</th>
+                            <th className="p-6 text-xs font-black text-gray-400 uppercase">교사 품질</th>
                             <th className="p-6 text-xs font-black text-gray-400 uppercase">갱신 임박(30일)</th>
                             <th className="p-6 text-xs font-black text-gray-400 uppercase">재등록 프록시</th>
                             <th className="p-6 text-xs font-black text-gray-400 uppercase">대기 상담</th>
@@ -139,6 +154,13 @@ const AcademyOpsTab: React.FC<AcademyOpsTabProps> = ({ academies, users, request
                                     ) : '-'}
                                 </td>
                                 <td className="p-6">
+                                    {s.teacherQualityAvg !== null ? (
+                                        <span className={`px-3 py-1 rounded-lg text-sm font-bold ${s.teacherQualityAvg < 3 ? 'bg-red-50 text-red-500' : 'bg-indigo-50 text-indigo-600'}`}>
+                                            {s.teacherQualityAvg.toFixed(1)}
+                                        </span>
+                                    ) : <span className="text-gray-300 text-sm">점검 없음</span>}
+                                </td>
+                                <td className="p-6">
                                     {s.programTracked > 0 ? (
                                         <span className={`px-3 py-1 rounded-lg text-sm font-bold ${s.renewalSoon30d > 0 ? 'bg-secondary/10 text-secondary' : 'bg-gray-50 text-gray-500'}`}>
                                             {s.renewalSoon30d}명
@@ -156,7 +178,7 @@ const AcademyOpsTab: React.FC<AcademyOpsTabProps> = ({ academies, users, request
                         ))}
                         {stats.length === 0 && (
                             <tr>
-                                <td colSpan={8} className="p-10 text-center text-gray-400 font-medium">
+                                <td colSpan={9} className="p-10 text-center text-gray-400 font-medium">
                                     표시할 학원/사용자 데이터가 없습니다.
                                 </td>
                             </tr>

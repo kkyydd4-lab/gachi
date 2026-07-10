@@ -81,6 +81,12 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // --- teacher_quality_checks: 교사 수업 품질 점검 (관리자가 작성, 본인 교사만 열람) ---
+    match /teacher_quality_checks/{checkId} {
+      allow read: if isSignedIn() && (isAdmin() || resource.data.teacherUid == request.auth.uid);
+      allow write: if isAdmin();
+    }
+
     // --- manuals: 가맹 운영 매뉴얼 (본사가 작성, 선생님/원장이 열람) ---
     match /manuals/{manualId} {
       allow read: if isSignedIn() && (isAdmin() || callerProfile().role == 'TEACHER');

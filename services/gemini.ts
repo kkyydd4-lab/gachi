@@ -1,7 +1,18 @@
-import { GoogleGenerativeAI, SchemaType, GenerationConfig } from "@google/generative-ai";
+// AI 생성 클라이언트 — 서버 프록시(/api/gemini, AI Gateway 경유)만 호출한다.
+// 이전의 "프록시 실패 시 브라우저에서 Google API 직접 호출" 폴백은 API 키가
+// 번들에 노출되는 보안 문제가 있어 제거됨. 모델 선택/폴백/재시도는 서버가 담당.
 
-// Re-export strict types for consumers
-export { SchemaType as Type };
+// 기존 호출부(@google/generative-ai의 SchemaType)와의 호환용 스키마 타입 상수
+// 값은 JSON Schema 타입 문자열과 동일하다.
+export const Type = {
+    STRING: 'string',
+    NUMBER: 'number',
+    INTEGER: 'integer',
+    BOOLEAN: 'boolean',
+    ARRAY: 'array',
+    OBJECT: 'object',
+} as const;
+
 export type Schema = any;
 
 export interface GenerationOptions {
@@ -14,123 +25,43 @@ export interface GenerationOptions {
     responseSchema?: any;
 }
 
-const DEFAULT_MODEL = "gemini-3-flash-preview";
-const FALLBACK_MODEL = "gemini-2.5-flash";
-const MAX_RETRIES = 2;
+const REQUEST_TIMEOUT_MS = 120_000; // 서버가 폴백/재시도를 다 소진할 시간 여유
 
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-function repairTruncatedJson(text: string): string {
-    let cleaned = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    const quoteCount = (cleaned.match(/(?<!\\)"/g) || []).length;
-    if (quoteCount % 2 !== 0) cleaned += '"';
-
-    let braces = 0, brackets = 0, inString = false;
-    for (let i = 0; i < cleaned.length; i++) {
-        const ch = cleaned[i];
-        if (ch === '"' && (i === 0 || cleaned[i - 1] !== '\\')) inString = !inString;
-        if (inString) continue;
-        if (ch === '{') braces++;
-        if (ch === '}') braces--;
-        if (ch === '[') brackets++;
-        if (ch === ']') brackets--;
-    }
-
-    cleaned = cleaned.replace(/,\s*"[^"]*"?\s*:?\s*$/, '');
-    cleaned = cleaned.replace(/,\s*$/, '');
-    for (let i = 0; i < brackets; i++) cleaned += ']';
-    for (let i = 0; i < braces; i++) cleaned += '}';
-    return cleaned;
-}
-
-/**
- * 서버 프록시(/api/gemini) 우선 시도, 실패 시 클라이언트 직접 호출 폴백
- */
 export async function generateContent<T = any>(
     prompt: string,
     options: GenerationOptions = {}
 ): Promise<T> {
-    // 1차: 서버 프록시 시도
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
     try {
         const response = await fetch('/api/gemini', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ prompt, options }),
+            signal: controller.signal,
         });
 
-        if (response.ok) {
-            const result = await response.json();
-            if (result.repaired) {
-                console.warn('⚠️ Server repaired truncated JSON response');
-            }
-            return result.data as T;
-        }
-    } catch {
-        console.warn('⚠️ Gemini proxy unavailable, falling back to direct API call');
-    }
-
-    // 2차: 클라이언트 직접 호출 (폴백)
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-    if (!apiKey) {
-        throw new Error("Gemini API key is not configured.");
-    }
-
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const modelsToTry = [options.model || DEFAULT_MODEL, FALLBACK_MODEL];
-
-    const generationConfig: GenerationConfig = {
-        temperature: options.temperature ?? 0.7,
-        topP: options.topP ?? 0.95,
-        topK: options.topK ?? 40,
-        maxOutputTokens: options.maxOutputTokens ?? 65536,
-    };
-
-    if (options.responseMimeType) {
-        generationConfig.responseMimeType = options.responseMimeType;
-    }
-    if (options.responseSchema) {
-        generationConfig.responseMimeType = "application/json";
-        generationConfig.responseSchema = options.responseSchema;
-    }
-
-    let lastError: any = null;
-
-    for (const modelId of modelsToTry) {
-        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        if (!response.ok) {
+            let message = `AI 생성 요청이 실패했습니다. (${response.status})`;
             try {
-                if (attempt > 0) {
-                    await delay(Math.pow(2, attempt) * 1000);
-                }
-
-                const model = genAI.getGenerativeModel({ model: modelId, generationConfig });
-                const result = await model.generateContent(prompt);
-                const text = result.response.text();
-
-                if (generationConfig.responseMimeType === "application/json") {
-                    try {
-                        const cleaned = text.replace(/```json/g, '').replace(/```/g, '').trim();
-                        return JSON.parse(cleaned) as T;
-                    } catch {
-                        try {
-                            const repaired = repairTruncatedJson(text);
-                            console.warn('⚠️ Repaired truncated JSON response');
-                            return JSON.parse(repaired) as T;
-                        } catch {
-                            throw new Error("AI returned malformed JSON.");
-                        }
-                    }
-                }
-
-                return text as unknown as T;
-            } catch (error: any) {
-                lastError = error;
-                const msg = error?.message || '';
-                const isRetryable = msg.includes('503') || msg.includes('429') || msg.includes('overloaded') || msg.includes('rate limit');
-                if (isRetryable && attempt < MAX_RETRIES) continue;
-                break;
-            }
+                const body = await response.json();
+                if (body?.error) message = body.error;
+            } catch { /* 응답 본문이 JSON이 아니면 기본 메시지 유지 */ }
+            throw new Error(message);
         }
-    }
 
-    throw lastError;
+        const result = await response.json();
+        if (result.repaired) {
+            console.warn('⚠️ Server repaired truncated JSON response');
+        }
+        return result.data as T;
+    } catch (error: any) {
+        if (error?.name === 'AbortError') {
+            throw new Error('AI 생성 요청이 시간 초과되었습니다. 잠시 후 다시 시도해주세요.');
+        }
+        throw error;
+    } finally {
+        clearTimeout(timeout);
+    }
 }

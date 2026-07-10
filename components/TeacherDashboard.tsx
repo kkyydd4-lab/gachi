@@ -16,7 +16,7 @@ import { AuthService } from '../services/api';
 const MANUAL_CATEGORIES: ManualCategory[] = ['신규 상담 대응', '학부모 불만 대응', '모집·홍보', '재등록 관리', '교사 관리', '지점 운영'];
 
 const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ user, onLogout }) => {
-    const [activeTab, setActiveTab] = useState<'briefing' | 'students' | 'consultation' | 'manuals'>('briefing');
+    const [activeTab, setActiveTab] = useState<'briefing' | 'students' | 'consultation' | 'manuals' | 'marketing'>('briefing');
     const [selectedStudent, setSelectedStudent] = useState<UserAccount | null>(null);
     const [students, setStudents] = useState<UserAccount[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -29,6 +29,50 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ user, onLogout }) =
     const [consultScript, setConsultScript] = useState('');
     const [isGeneratingScript, setIsGeneratingScript] = useState(false);
     const [scriptError, setScriptError] = useState('');
+
+    // 홍보문 생성 도구
+    const [marketingType, setMarketingType] = useState<'블로그 글' | '학부모 안내 문자' | '설명회 안내문'>('블로그 글');
+    const [marketingTopic, setMarketingTopic] = useState('');
+    const [marketingDraft, setMarketingDraft] = useState('');
+    const [isGeneratingMarketing, setIsGeneratingMarketing] = useState(false);
+    const [marketingError, setMarketingError] = useState('');
+
+    const generateMarketingDraft = async () => {
+        if (isGeneratingMarketing || !marketingTopic.trim()) return;
+        setIsGeneratingMarketing(true);
+        setMarketingError('');
+        try {
+            const formatGuide = marketingType === '블로그 글'
+                ? '네이버 블로그용. 제목 1개 + 본문 800자 내외. 학부모가 검색할 법한 표현을 자연스럽게 포함. 문단을 짧게 나누고, 마지막에 상담 문의 유도 문장으로 마무리.'
+                : marketingType === '학부모 안내 문자'
+                    ? '학부모 대상 안내 문자(LMS)용. 200자 내외. 핵심만 간결하게, 존댓말, 마지막에 회신/문의 방법 포함.'
+                    : '오프라인 설명회 안내문. 400자 내외. 설명회에서 다룰 내용 3가지를 항목으로 제시하고, 참석 시 얻어갈 것을 명확히. 일시/장소는 [일시], [장소] 플레이스홀더로 남길 것.';
+
+            const prompt = `당신은 초중등 문해력 전문 학원 "가치인"의 마케팅 담당자입니다.
+
+[작성 요청]
+- 유형: ${marketingType}
+- 주제: ${marketingTopic.trim()}
+
+[가치인 브랜드 톤]
+- 독서·논술·토론을 통합한 문해력 교육, "성과와 사람됨을 동시에"
+- 과장 없이 학부모의 실제 고민(글쓰기 걱정, 수행평가 대비, 중등 전환)에 공감하는 어조
+- 정보를 쏟아내기보다 "우리 아이 점검이 필요하겠다"는 문제 인식을 이끌어낼 것
+
+[형식]
+${formatGuide}
+
+본문만 출력하세요 (설명/마크다운 코드블록 없이).`;
+
+            const text = await generateContent<string>(prompt, { temperature: 0.8, maxOutputTokens: 4096 });
+            setMarketingDraft(typeof text === 'string' ? text.trim() : String(text));
+        } catch (e) {
+            console.error('Generate marketing draft error:', e);
+            setMarketingError('생성에 실패했습니다. 잠시 후 다시 시도해주세요.');
+        } finally {
+            setIsGeneratingMarketing(false);
+        }
+    };
 
     const generateConsultScript = async (student: UserAccount) => {
         if (isGeneratingScript) return;
@@ -275,6 +319,13 @@ ${result?.teacherNote ? `- 선생님 관찰 노트: ${result.teacherNote}` : ''}
                     >
                         <span className="material-symbols-outlined">menu_book</span>
                         운영 매뉴얼
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('marketing')}
+                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors font-bold ${activeTab === 'marketing' ? 'bg-primary text-white shadow-lg shadow-primary/30' : 'text-gray-400 hover:bg-gray-50'}`}
+                    >
+                        <span className="material-symbols-outlined">campaign</span>
+                        홍보 도구
                     </button>
                 </nav>
 
@@ -546,6 +597,66 @@ ${result?.teacherNote ? `- 선생님 관찰 노트: ${result.teacherNote}` : ''}
 
                         {manuals.length === 0 && (
                             <p className="text-center text-gray-400 py-16">아직 등록된 운영 매뉴얼이 없습니다.</p>
+                        )}
+                    </div>
+                )}
+
+                {activeTab === 'marketing' && (
+                    <div className="max-w-3xl mx-auto space-y-6">
+                        <header className="mb-2">
+                            <h2 className="text-2xl font-black text-navy mb-2">홍보 도구 📣</h2>
+                            <p className="text-gray-500">주제만 입력하면 우리 지점용 블로그 글·안내 문자·설명회 안내문 초안을 만들어 드립니다.</p>
+                        </header>
+
+                        <div className="bg-white rounded-3xl p-8 border border-gray-100 shadow-sm space-y-5">
+                            <div>
+                                <p className="text-sm font-bold text-navy mb-2">유형</p>
+                                <div className="flex gap-2 flex-wrap">
+                                    {(['블로그 글', '학부모 안내 문자', '설명회 안내문'] as const).map(t => (
+                                        <button
+                                            key={t}
+                                            onClick={() => setMarketingType(t)}
+                                            className={`px-4 py-2.5 rounded-xl text-sm font-bold transition-all ${marketingType === t ? 'bg-primary text-white shadow-lg shadow-primary/30' : 'bg-gray-50 text-gray-500 hover:bg-gray-100'}`}
+                                        >
+                                            {t}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            <div>
+                                <p className="text-sm font-bold text-navy mb-2">주제</p>
+                                <input
+                                    value={marketingTopic}
+                                    onChange={e => setMarketingTopic(e.target.value)}
+                                    placeholder="예: 초등 고학년 겨울방학 글쓰기 특강 모집"
+                                    className="w-full p-4 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                />
+                            </div>
+                            <button
+                                onClick={generateMarketingDraft}
+                                disabled={isGeneratingMarketing || !marketingTopic.trim()}
+                                className="w-full py-4 bg-primary text-white rounded-xl font-bold hover:brightness-105 transition-all disabled:opacity-40 flex items-center justify-center gap-2"
+                            >
+                                {isGeneratingMarketing && <span className="material-symbols-outlined animate-spin text-sm">refresh</span>}
+                                {isGeneratingMarketing ? '생성 중...' : marketingDraft ? '다시 생성' : '초안 생성'}
+                            </button>
+                            {marketingError && <p className="text-sm text-red-500 font-bold">{marketingError}</p>}
+                        </div>
+
+                        {marketingDraft && (
+                            <div className="bg-white rounded-3xl p-8 border border-gray-100 shadow-sm">
+                                <div className="flex items-center justify-between mb-4">
+                                    <h3 className="font-black text-navy">{marketingType} 초안</h3>
+                                    <button
+                                        onClick={() => navigator.clipboard?.writeText(marketingDraft)}
+                                        className="text-xs font-bold text-primary hover:text-primary/80 flex items-center gap-1"
+                                    >
+                                        <span className="material-symbols-outlined text-sm">content_copy</span>
+                                        복사하기
+                                    </button>
+                                </div>
+                                <p className="text-sm text-navy leading-relaxed whitespace-pre-wrap">{marketingDraft}</p>
+                            </div>
                         )}
                     </div>
                 )}

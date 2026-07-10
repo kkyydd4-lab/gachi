@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { UserAccount, TestResult, GradeGroupType, Asset, ConsultationRequest, OperationManual, ManualCategory, TeacherQualityCheck, QUALITY_CHECK_CRITERIA } from '../types';
 import { SessionService, AssetService, ConsultationService, ManualService, TeacherQualityService } from '../services/api';
+import { generateContent } from '../services/gemini';
+import { getGradeSegment } from '../data/gradeSegments';
 import ReportView from './ReportView'; // 상담 모드에서 재사용
 
 interface TeacherDashboardProps {
@@ -22,6 +24,55 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ user, onLogout }) =
     const [manuals, setManuals] = useState<OperationManual[]>([]);
     const [openManualId, setOpenManualId] = useState<string | null>(null);
     const [myQualityChecks, setMyQualityChecks] = useState<TeacherQualityCheck[]>([]);
+
+    // AI 상담 스크립트 (상담 모드)
+    const [consultScript, setConsultScript] = useState('');
+    const [isGeneratingScript, setIsGeneratingScript] = useState(false);
+    const [scriptError, setScriptError] = useState('');
+
+    const generateConsultScript = async (student: UserAccount) => {
+        if (isGeneratingScript) return;
+        setIsGeneratingScript(true);
+        setScriptError('');
+        try {
+            const result = student.testResult;
+            const segment = getGradeSegment(student.grade || '');
+            const competencyLines = result
+                ? result.competencies.filter(c => c.total > 0).map(c => `- ${c.label}: ${c.score}점 (평균 ${c.average}점)`).join('\n')
+                : '진단 결과 없음';
+            const careZones = result ? result.competencies.filter(c => c.total > 0 && c.score < 60).map(c => c.label).join(', ') : '';
+
+            const prompt = `당신은 초중등 문해력 전문 학원의 베테랑 상담 실장입니다. 아래 학생의 진단 데이터를 바탕으로 학부모 상담 스크립트를 작성해주세요.
+
+[학생 정보]
+- 이름: ${student.name}
+- 학년: ${student.grade || '미상'} (${student.school || '학교 미상'})
+${segment ? `- 이 시기 학부모의 대표적 고민: ${segment.concern}\n- 권장 과정: ${segment.product}` : ''}
+
+[진단 결과]
+${result ? `- 총점: ${result.totalScore}점 / 레벨: ${result.level}` : '- 아직 진단 미응시'}
+${competencyLines}
+${careZones ? `- 집중 케어 필요 영역: ${careZones}` : ''}
+${result?.teacherNote ? `- 선생님 관찰 노트: ${result.teacherNote}` : ''}
+
+[작성 지침]
+1. "말하기"보다 "듣기" 우선: 스크립트 첫 부분은 학부모의 고민을 끌어내는 질문 2~3개로 시작할 것 (예: "혹시 책은 읽는데 글쓰기를 어려워하지 않나요?")
+2. 진단 데이터를 근거로 강점 1가지를 먼저 인정한 뒤, 보완점을 부드럽게 전달
+3. 보완점은 "문제"가 아니라 "지금 훈련하면 가장 빨리 크는 영역"으로 표현
+4. 마지막에 다음 달 학습 방향과 재등록/과정 안내로 자연스럽게 연결
+5. 전체 500자 내외, 존댓말, 실제로 소리 내어 읽을 수 있는 구어체
+
+스크립트 본문만 출력하세요 (제목/마크다운 없이).`;
+
+            const text = await generateContent<string>(prompt, { temperature: 0.7, maxOutputTokens: 2048 });
+            setConsultScript(typeof text === 'string' ? text.trim() : String(text));
+        } catch (e) {
+            console.error('Generate consult script error:', e);
+            setScriptError('스크립트 생성에 실패했습니다. 잠시 후 다시 시도해주세요.');
+        } finally {
+            setIsGeneratingScript(false);
+        }
+    };
 
     useEffect(() => {
         const loadStudents = async () => {
@@ -85,8 +136,7 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ user, onLogout }) =
     const openConsultationFromRequest = async (req: ConsultationRequest) => {
         const student = students.find(s => s.uid === req.studentUid);
         if (student) {
-            setSelectedStudent(student);
-            setActiveTab('consultation');
+            openConsultation(student);
         }
         await ConsultationService.markResolved(req.id);
         setPendingRequests(prev => prev.filter(r => r.id !== req.id));
@@ -120,6 +170,8 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ user, onLogout }) =
     // 상담 모드 진입
     const openConsultation = (student: UserAccount) => {
         setSelectedStudent(student);
+        setConsultScript('');
+        setScriptError('');
         setActiveTab('consultation');
     };
 
@@ -141,6 +193,40 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ user, onLogout }) =
                         대시보드로 복귀
                     </button>
                 </div>
+                {/* AI 상담 스크립트 생성 (진단 데이터 + 학년 세그먼트 기반) */}
+                <div className="max-w-4xl mx-auto px-6 pt-6">
+                    <div className="bg-indigo-50/60 border border-indigo-100 rounded-3xl p-6">
+                        <div className="flex items-center justify-between flex-wrap gap-3 mb-1">
+                            <h4 className="font-black text-navy flex items-center gap-2">
+                                <span className="material-symbols-outlined text-indigo-500">smart_toy</span>
+                                AI 상담 스크립트
+                            </h4>
+                            <button
+                                onClick={() => generateConsultScript(selectedStudent)}
+                                disabled={isGeneratingScript}
+                                className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                            >
+                                {isGeneratingScript && <span className="material-symbols-outlined animate-spin text-sm">refresh</span>}
+                                {isGeneratingScript ? '생성 중...' : consultScript ? '다시 생성' : '스크립트 생성'}
+                            </button>
+                        </div>
+                        <p className="text-xs text-gray-400 mb-3">진단 결과와 학년 특성을 반영해 상담 도입 질문부터 재등록 안내까지 초안을 만들어 드립니다.</p>
+                        {scriptError && <p className="text-sm text-red-500 font-bold">{scriptError}</p>}
+                        {consultScript && (
+                            <div className="bg-white rounded-2xl p-5 border border-indigo-100">
+                                <p className="text-sm text-navy leading-relaxed whitespace-pre-wrap">{consultScript}</p>
+                                <button
+                                    onClick={() => navigator.clipboard?.writeText(consultScript)}
+                                    className="mt-3 text-xs font-bold text-indigo-500 hover:text-indigo-700 flex items-center gap-1"
+                                >
+                                    <span className="material-symbols-outlined text-sm">content_copy</span>
+                                    복사하기
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
                 {/* ReportView를 상담 모드로 재사용 (여기서는 onStartTest 등 불필요한 prop은 더미로 전달) */}
                 <ReportView
                     user={selectedStudent}

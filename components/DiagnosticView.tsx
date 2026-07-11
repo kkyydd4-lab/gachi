@@ -218,6 +218,7 @@ const DiagnosticView: React.FC<DiagnosticViewProps> = ({ user, onComplete, onCan
         const usedSessionIds = new Set(pastSessions.map(s => s.learningSessionId).filter(Boolean));
 
         // 3. Load all assets for this grade group
+        setAgentStatus('WRITING'); // 지문 불러오는 단계
         const allAssets = await AssetService.getApprovedAssets(userGradeGroup);
 
         let sessionAssets: Asset[] = [];
@@ -251,6 +252,22 @@ const DiagnosticView: React.FC<DiagnosticViewProps> = ({ user, onComplete, onCan
           return;
         }
 
+        // 문항 구성 단계 + Process Inspector용 실제 구성 정보
+        setAgentStatus('EXAMINING');
+        const categoryCounts: Record<string, number> = {};
+        sessionAssets.forEach(a => a.questions.forEach(q => {
+          categoryCounts[q.category] = (categoryCounts[q.category] || 0) + 1;
+        }));
+        setBlueprintInfo({
+          source: currentSession ? 'ADMIN_CUSTOM' : 'SYSTEM_DEFAULT',
+          gradeGroup: userGradeGroup,
+          architecture: categoryCounts,
+          subjects: sessionAssets.map(a => a.subject),
+          promptUsed: currentSession
+            ? `승인된 차시 "${currentSession.title}" 로드`
+            : '승인된 지문 풀에서 직접 선택'
+        });
+
         // 5. Transform Assets to DiagnosticPassages and set initial state
         let globalQId = 1;
         const loadedPassages: DiagnosticPassage[] = sessionAssets.map(asset => {
@@ -265,6 +282,7 @@ const DiagnosticView: React.FC<DiagnosticViewProps> = ({ user, onComplete, onCan
           return p;
         });
 
+        setAgentStatus('FINALIZING');
         setPassages(loadedPassages);
         setLoading(false);
 

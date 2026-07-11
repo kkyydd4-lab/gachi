@@ -220,6 +220,7 @@ ${additionalInstructions ? `[추가 지침]: ${additionalInstructions}` : ''}`;
             // Main Generator Logic - Sequential Execution (Gemini rate limit 대응)
             setAgentStep('WRITING');
             const MAX_RETRY = 2;
+            const failedTopics: string[] = [];
 
             for (let i = 0; i < targetTopics.length; i++) {
                 let asset: Asset | null = null;
@@ -235,7 +236,17 @@ ${additionalInstructions ? `[추가 지침]: ${additionalInstructions}` : ''}`;
                     newAssets.push(asset);
                 } else {
                     console.error(`❌ ${targetTopics[i]} 최종 실패 (${MAX_RETRY}회 재시도 후)`);
+                    failedTopics.push(targetTopics[i]);
                 }
+            }
+
+            // 이전에는 실패한 주제가 콘솔에만 남고 화면에는 아무 안내가 없었음
+            if (failedTopics.length > 0) {
+                setError(
+                    newAssets.length > 0
+                        ? `일부 주제 생성에 실패했습니다: ${failedTopics.join(', ')} — 성공한 ${newAssets.length}개 지문만 차시로 저장됩니다.`
+                        : `모든 주제(${failedTopics.join(', ')}) 생성에 실패했습니다. 잠시 후 다시 시도해주세요.`
+                );
             }
 
             // 일괄 저장 (DB 부하 고려 시 개별 저장도 괜찮지만, 트랜잭션 관점에서는 일괄이 나음)

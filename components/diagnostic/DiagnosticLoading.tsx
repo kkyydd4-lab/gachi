@@ -29,19 +29,19 @@ const DiagnosticLoading: React.FC<DiagnosticLoadingProps> = ({
     const getStatusText = (status: AgentStatus) => {
         switch (status) {
             case 'PLANNING': return '학습자의 수준을 분석하고 있어요...';
-            case 'WRITING': return '맞춤형 지문을 집필하고 있어요...';
-            case 'EXAMINING': return '문해력 평가 문항을 출제하고 있어요...';
-            case 'FINALIZING': return '최종 검토를 진행하고 있어요...';
+            case 'WRITING': return '오늘의 평가 지문을 불러오고 있어요...';
+            case 'EXAMINING': return '5가지 역량별 문항을 구성하고 있어요...';
+            case 'FINALIZING': return '평가 준비가 거의 끝났어요!';
             default: return '준비 중입니다...';
         }
     };
 
     const getStatusSubText = (status: AgentStatus) => {
         switch (status) {
-            case 'PLANNING': return 'AI 교육 전문가들이 커리큘럼을 설계합니다';
-            case 'WRITING': return '생성형 AI가 흥미로운 주제의 글을 작성합니다';
-            case 'EXAMINING': return '평가 전문가가 5가지 역량별 문항을 구성합니다';
-            case 'FINALIZING': return '잠시만 기다려주세요, 거의 다 됐어요!';
+            case 'PLANNING': return '학년에 맞는 진단 차시를 선택합니다';
+            case 'WRITING': return 'AI가 만들고 선생님이 검수한 지문을 준비합니다';
+            case 'EXAMINING': return '어휘력부터 비판적 이해까지 균형 있게 배치합니다';
+            case 'FINALIZING': return '잠시만 기다려주세요, 곧 시작됩니다!';
             default: return '';
         }
     };
@@ -110,7 +110,7 @@ const DiagnosticLoading: React.FC<DiagnosticLoadingProps> = ({
                     {trustContentIdx === 1 && (
                         <div className="animate-fade-in space-y-2">
                             <span className="block text-2xl">🤖</span>
-                            <p className="text-sm font-bold text-gray-600">최신 Google Gemini Pro 엔진</p>
+                            <p className="text-sm font-bold text-gray-600">AI 생성 + 교사 검수 문항</p>
                         </div>
                     )}
                     {trustContentIdx === 2 && (

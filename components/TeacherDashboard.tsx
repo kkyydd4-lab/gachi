@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { UserAccount, TestResult, GradeGroupType, Asset, ConsultationRequest, OperationManual, ManualCategory, TeacherQualityCheck, QUALITY_CHECK_CRITERIA } from '../types';
-import { SessionService, AssetService, ConsultationService, ManualService, TeacherQualityService, AcademyService } from '../services/api';
+import { UserAccount, TestResult, GradeGroupType, Asset, ConsultationRequest, OperationManual, ManualCategory, TeacherQualityCheck, QUALITY_CHECK_CRITERIA, Writing, WRITING_RUBRIC_CRITERIA } from '../types';
+import { SessionService, AssetService, ConsultationService, ManualService, TeacherQualityService, AcademyService, WritingService } from '../services/api';
 import { generateContent } from '../services/gemini';
 import { getGradeSegment } from '../data/gradeSegments';
 import ReportView from './ReportView'; // 상담 모드에서 재사용
@@ -17,7 +17,7 @@ import { AuthService } from '../services/api';
 const MANUAL_CATEGORIES: ManualCategory[] = ['신규 상담 대응', '학부모 불만 대응', '모집·홍보', '재등록 관리', '교사 관리', '지점 운영'];
 
 const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ user, onLogout }) => {
-    const [activeTab, setActiveTab] = useState<'briefing' | 'students' | 'consultation' | 'manuals' | 'marketing' | 'director'>('briefing');
+    const [activeTab, setActiveTab] = useState<'briefing' | 'students' | 'consultation' | 'manuals' | 'marketing' | 'director' | 'writings'>('briefing');
     const [selectedStudent, setSelectedStudent] = useState<UserAccount | null>(null);
     const [students, setStudents] = useState<UserAccount[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -31,6 +31,40 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ user, onLogout }) =
     const [consultScript, setConsultScript] = useState('');
     const [isGeneratingScript, setIsGeneratingScript] = useState(false);
     const [scriptError, setScriptError] = useState('');
+
+    // 학생 글 검토
+    const [writings, setWritings] = useState<Writing[]>([]);
+    const [selectedWriting, setSelectedWriting] = useState<Writing | null>(null);
+    const [writingComment, setWritingComment] = useState('');
+    const [isConfirmingWriting, setIsConfirmingWriting] = useState(false);
+
+    useEffect(() => {
+        const loadWritings = async () => {
+            if (!user.academyId) return;
+            const list = await WritingService.getByAcademy(user.academyId);
+            setWritings(list);
+        };
+        if (user.role === 'TEACHER') loadWritings();
+    }, [user.academyId, user.role]);
+
+    const pendingWritings = writings.filter(w => w.status !== 'TEACHER_CONFIRMED');
+
+    const confirmWriting = async () => {
+        if (!selectedWriting || !writingComment.trim() || isConfirmingWriting) return;
+        setIsConfirmingWriting(true);
+        const ok = await WritingService.confirm(selectedWriting.id, writingComment.trim(), user.name);
+        setIsConfirmingWriting(false);
+        if (!ok) { alert('저장에 실패했습니다. 잠시 후 다시 시도해주세요.'); return; }
+        const updated: Writing = { ...selectedWriting, teacherComment: writingComment.trim(), confirmedBy: user.name, confirmedAt: new Date().toISOString(), status: 'TEACHER_CONFIRMED' };
+        setWritings(prev => prev.map(w => (w.id === updated.id ? updated : w)));
+        setSelectedWriting(null);
+        setWritingComment('');
+    };
+
+    const writingAvg = (w: Writing) => {
+        if (!w.aiReview?.rubric?.length) return null;
+        return (w.aiReview.rubric.reduce((s, r) => s + r.score, 0) / w.aiReview.rubric.length).toFixed(1);
+    };
 
     // 학생 초대 (학원 가입 코드 안내)
     const [inviteCode, setInviteCode] = useState<string | null>(null);
@@ -343,6 +377,18 @@ ${result?.teacherNote ? `- 선생님 관찰 노트: ${result.teacherNote}` : ''}
                     >
                         <span className="material-symbols-outlined">groups</span>
                         학생 관리
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('writings')}
+                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors font-bold ${activeTab === 'writings' ? 'bg-primary text-white shadow-lg shadow-primary/30' : 'text-gray-400 hover:bg-gray-50'}`}
+                    >
+                        <span className="material-symbols-outlined">rate_review</span>
+                        글 검토
+                        {pendingWritings.length > 0 && (
+                            <span className={`ml-auto text-xs font-black min-w-[20px] h-5 px-1.5 rounded-full flex items-center justify-center ${activeTab === 'writings' ? 'bg-white text-secondary' : 'bg-secondary text-white'}`}>
+                                {pendingWritings.length}
+                            </span>
+                        )}
                     </button>
                     <button
                         onClick={() => setActiveTab('manuals')}
@@ -712,6 +758,105 @@ ${result?.teacherNote ? `- 선생님 관찰 노트: ${result.teacherNote}` : ''}
                         )}
                     </div>
                 )}
+                {activeTab === 'writings' && (
+                    <div className="max-w-4xl mx-auto space-y-6">
+                        <header className="mb-2">
+                            <h2 className="text-2xl font-black text-navy mb-2">학생 글 검토 ✏️</h2>
+                            <p className="text-gray-500">AI 분석을 먼저 확인하고, 선생님의 한마디를 남기면 학생과 학부모 리포트에 전달됩니다.</p>
+                        </header>
+
+                        {!selectedWriting ? (
+                            writings.length === 0 ? (
+                                <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-12 text-center text-gray-400">
+                                    아직 제출된 글이 없습니다.
+                                </div>
+                            ) : (
+                                <div className="space-y-3">
+                                    {writings.map(w => (
+                                        <button
+                                            key={w.id}
+                                            onClick={() => { setSelectedWriting(w); setWritingComment(w.teacherComment || ''); }}
+                                            className="w-full text-left bg-white rounded-2xl border border-gray-100 shadow-sm p-5 hover:shadow-md transition-shadow"
+                                        >
+                                            <div className="flex items-center justify-between gap-3 flex-wrap">
+                                                <div className="min-w-0">
+                                                    <p className="font-bold text-navy truncate">{w.title}</p>
+                                                    <p className="text-xs text-gray-400 mt-1">
+                                                        {w.studentName} · {w.genre} · {new Date(w.submittedAt).toLocaleDateString()}
+                                                    </p>
+                                                </div>
+                                                <div className="flex items-center gap-2 shrink-0">
+                                                    {writingAvg(w) && <span className="text-sm font-black text-indigo-600">{writingAvg(w)}점</span>}
+                                                    <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${w.status === 'TEACHER_CONFIRMED' ? 'bg-primary/10 text-primary' : 'bg-secondary/10 text-secondary'}`}>
+                                                        {w.status === 'TEACHER_CONFIRMED' ? '확인 완료' : '검토 필요'}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+                            )
+                        ) : (
+                            <div className="space-y-5">
+                                <button
+                                    onClick={() => setSelectedWriting(null)}
+                                    className="text-sm font-bold text-gray-400 hover:text-navy flex items-center gap-1"
+                                >
+                                    <span className="material-symbols-outlined text-sm">arrow_back</span>
+                                    목록으로
+                                </button>
+
+                                <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-8">
+                                    <h3 className="text-xl font-black text-navy mb-1">{selectedWriting.title}</h3>
+                                    <p className="text-xs text-gray-400 mb-5">{selectedWriting.studentName} · {selectedWriting.genre} · {selectedWriting.content.length}자</p>
+                                    <p className="text-navy leading-relaxed whitespace-pre-wrap">{selectedWriting.content}</p>
+                                </div>
+
+                                {selectedWriting.aiReview && (
+                                    <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-8">
+                                        <h4 className="font-black text-navy mb-4 flex items-center gap-2">
+                                            <span className="material-symbols-outlined text-indigo-500">smart_toy</span>
+                                            AI 루브릭 분석
+                                        </h4>
+                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                                            {WRITING_RUBRIC_CRITERIA.map(c => {
+                                                const item = selectedWriting.aiReview!.rubric.find(r => r.criterion === c);
+                                                return (
+                                                    <div key={c} className="bg-indigo-50/50 rounded-2xl p-3 text-center">
+                                                        <p className="text-[10px] text-gray-400 font-bold mb-1">{c}</p>
+                                                        <p className="text-xl font-black text-indigo-600">{item?.score ?? '-'}</p>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                        <p className="text-sm text-gray-600 leading-relaxed">{selectedWriting.aiReview.overall}</p>
+                                    </div>
+                                )}
+
+                                <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-8">
+                                    <h4 className="font-black text-navy mb-3 flex items-center gap-2">
+                                        <span className="material-symbols-outlined text-secondary">school</span>
+                                        선생님의 한마디
+                                    </h4>
+                                    <textarea
+                                        value={writingComment}
+                                        onChange={e => setWritingComment(e.target.value)}
+                                        placeholder="학생과 학부모가 함께 읽습니다. AI 분석에 덧붙여 직접 관찰한 성장 포인트를 남겨주세요."
+                                        className="w-full min-h-[100px] p-4 rounded-xl border border-gray-200 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                    />
+                                    <button
+                                        onClick={confirmWriting}
+                                        disabled={isConfirmingWriting || !writingComment.trim()}
+                                        className="mt-4 w-full py-3.5 bg-primary text-white rounded-xl font-bold hover:brightness-105 transition-all disabled:opacity-40"
+                                    >
+                                        {isConfirmingWriting ? '저장 중...' : selectedWriting.status === 'TEACHER_CONFIRMED' ? '코멘트 수정하기' : '확인 완료 (학생·학부모에게 공개)'}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+
                 {activeTab === 'director' && user.isAcademyAdmin && (
                     <DirectorOpsTab
                         user={user}

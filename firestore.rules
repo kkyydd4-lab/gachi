@@ -100,6 +100,22 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // --- writings: 학생 글 (본인 작성, AI 분석 결과는 본인이 저장, 교사가 확인 코멘트) ---
+    match /writings/{writingId} {
+      allow read: if isSignedIn() && (
+        isAdmin() ||
+        resource.data.studentUid == request.auth.uid ||
+        isTeacherOfAcademy(resource.data.academyId)
+      );
+      allow create: if isSignedIn() && request.resource.data.studentUid == request.auth.uid;
+      allow update: if isSignedIn() && (
+        isAdmin() ||
+        resource.data.studentUid == request.auth.uid ||
+        isTeacherOfAcademy(resource.data.academyId)
+      );
+      allow delete: if isAdmin();
+    }
+
     // --- manuals: 가맹 운영 매뉴얼 (본사가 작성, 선생님/원장이 열람) ---
     match /manuals/{manualId} {
       allow read: if isSignedIn() && (isAdmin() || callerProfile().role == 'TEACHER');

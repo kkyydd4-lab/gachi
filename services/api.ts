@@ -1,5 +1,5 @@
 // Firebase 기반 API 서비스
-import { UserAccount, Asset, AdminConfig, GradeGroupType, TestSession, PostTestSurvey, Academy, GradeCurriculumConfig, LearningSession, LearningSessionStatus, ConsultationRequest, OperationManual, TeacherQualityCheck } from '../types';
+import { UserAccount, Asset, AdminConfig, GradeGroupType, TestSession, PostTestSurvey, Academy, GradeCurriculumConfig, LearningSession, LearningSessionStatus, ConsultationRequest, OperationManual, TeacherQualityCheck, Writing, WritingAiReview } from '../types';
 import { auth, db } from './firebase';
 import {
   signInWithEmailAndPassword,
@@ -777,6 +777,79 @@ export const ManualService = {
       return true;
     } catch (error) {
       console.error('Delete manual error:', error);
+      return false;
+    }
+  }
+};
+
+// --- Writing Service (학생 글쓰기 — 제출/AI 분석/교사 확인) ---
+const WRITINGS_COLLECTION = 'writings';
+
+export const WritingService = {
+  async create(writing: Writing): Promise<boolean> {
+    try {
+      await setDoc(doc(db, WRITINGS_COLLECTION, writing.id), writing);
+      return true;
+    } catch (error) {
+      console.error('Create writing error:', error);
+      return false;
+    }
+  },
+
+  // 학생 본인의 글 목록 (최신순)
+  async getByStudent(studentUid: string): Promise<Writing[]> {
+    try {
+      const q = query(collection(db, WRITINGS_COLLECTION), where('studentUid', '==', studentUid));
+      const snapshot = await getDocs(q);
+      return snapshot.docs
+        .map(d => d.data() as Writing)
+        .sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
+    } catch (error) {
+      console.error('Get writings by student error:', error);
+      return [];
+    }
+  },
+
+  // 선생님용: 우리 학원 학생들의 글 (최신순)
+  async getByAcademy(academyId: string): Promise<Writing[]> {
+    try {
+      const q = query(collection(db, WRITINGS_COLLECTION), where('academyId', '==', academyId));
+      const snapshot = await getDocs(q);
+      return snapshot.docs
+        .map(d => d.data() as Writing)
+        .sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
+    } catch (error) {
+      console.error('Get writings by academy error:', error);
+      return [];
+    }
+  },
+
+  // AI 루브릭 분석 결과 저장 (분석 실패 후 재시도 시에도 사용)
+  async attachAiReview(writingId: string, aiReview: WritingAiReview): Promise<boolean> {
+    try {
+      await updateDoc(doc(db, WRITINGS_COLLECTION, writingId), {
+        aiReview,
+        status: 'AI_REVIEWED'
+      });
+      return true;
+    } catch (error) {
+      console.error('Attach AI review error:', error);
+      return false;
+    }
+  },
+
+  // 교사 확인 완료
+  async confirm(writingId: string, teacherComment: string, teacherName: string): Promise<boolean> {
+    try {
+      await updateDoc(doc(db, WRITINGS_COLLECTION, writingId), {
+        teacherComment,
+        confirmedAt: new Date().toISOString(),
+        confirmedBy: teacherName,
+        status: 'TEACHER_CONFIRMED'
+      });
+      return true;
+    } catch (error) {
+      console.error('Confirm writing error:', error);
       return false;
     }
   }

@@ -1,6 +1,6 @@
-import React, { useState, useCallback, useRef } from 'react';
-import { ViewState, UserAccount, WrongAnswerRecord, PostTestSurvey } from '../types';
-import { SessionService, ConsultationService, AuthService } from '../services/api';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { ViewState, UserAccount, WrongAnswerRecord, PostTestSurvey, Writing } from '../types';
+import { SessionService, ConsultationService, AuthService, WritingService } from '../services/api';
 import { PostTestSurveyForm } from './MicroSurvey';
 import { getGradeSegment } from '../data/gradeSegments';
 import {
@@ -14,12 +14,13 @@ interface ReportViewProps {
   setView: (view: ViewState) => void;
   onLogout: () => void;
   onStartTest: () => void;
+  onOpenWriting?: () => void; // 글쓰기 노트 화면으로 이동
   isTeacherView?: boolean; // 선생님 상담 모드에서 렌더링될 때 true (코멘트 작성 가능)
 }
 
 const LOGO_URL = "https://lh3.googleusercontent.com/u/0/d/16S6A8l-NgtMiOb8mjf1-hLv0AgxnX-dc=w1000-h1000";
 
-const ReportView: React.FC<ReportViewProps> = ({ user, onLogout, onStartTest, isTeacherView = false }) => {
+const ReportView: React.FC<ReportViewProps> = ({ user, onLogout, onStartTest, onOpenWriting, isTeacherView = false }) => {
   const hasResult = !!user?.testResult;
   const bookSectionRef = useRef<HTMLDivElement>(null);
 
@@ -210,6 +211,21 @@ const ReportView: React.FC<ReportViewProps> = ({ user, onLogout, onStartTest, is
   const expertOpinion = generateExpertOpinion();
   const gradeSegment = getGradeSegment(user?.grade || '');
 
+  // 이번 달 쓴 글 (월간 리포트 항목)
+  const [monthlyWritings, setMonthlyWritings] = useState<Writing[]>([]);
+  useEffect(() => {
+    const loadWritings = async () => {
+      if (!user?.uid) return;
+      const all = await WritingService.getByStudent(user.uid);
+      const now = new Date();
+      setMonthlyWritings(all.filter(w => {
+        const d = new Date(w.submittedAt);
+        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+      }));
+    };
+    loadWritings();
+  }, [user?.uid]);
+
   // 월간 리포트 항목 6: "글쓰기에서 좋아진 점" — 직전 회차 대비 향상된 역량 (이력이 있을 때만)
   const improvedAreas = (() => {
     if (!user?.testHistory || user.testHistory.length < 2) return null;
@@ -240,6 +256,7 @@ const ReportView: React.FC<ReportViewProps> = ({ user, onLogout, onStartTest, is
           {[
             { icon: 'dashboard', label: '성장 대시보드', active: true, onClick: undefined, comingSoon: false },
             { icon: 'quiz', label: '문해력 평가', active: false, onClick: onStartTest, comingSoon: false },
+            { icon: 'edit_note', label: '글쓰기 노트', active: false, onClick: onOpenWriting, comingSoon: !onOpenWriting },
             {
               icon: 'auto_stories', label: 'AI 맞춤 도서', active: false, comingSoon: false,
               onClick: hasResult ? () => bookSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }) : undefined
@@ -540,6 +557,38 @@ const ReportView: React.FC<ReportViewProps> = ({ user, onLogout, onStartTest, is
                           <div className="flex items-center gap-2 bg-red-50 text-red-500 px-4 py-2 rounded-full text-sm font-bold border border-red-100 shadow-sm">
                             <span className="material-symbols-outlined text-lg">medical_services</span>
                             아직 부족한 점: {expertOpinion.careZones.join(', ')}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* 이번 달 쓴 글 */}
+                      <div className="bg-white rounded-2xl p-6 border border-gray-100">
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-sm text-gray-400 font-bold flex items-center gap-2">
+                            <span className="material-symbols-outlined text-primary">edit_note</span>
+                            이번 달 쓴 글
+                          </p>
+                          {onOpenWriting && (
+                            <button onClick={onOpenWriting} className="text-xs font-bold text-primary hover:underline">
+                              글쓰기 노트 열기 →
+                            </button>
+                          )}
+                        </div>
+                        {monthlyWritings.length === 0 ? (
+                          <p className="text-navy font-medium leading-relaxed">
+                            이번 달에 제출한 글이 아직 없어요. {onOpenWriting ? '글쓰기 노트에서 첫 글을 써보세요!' : ''}
+                          </p>
+                        ) : (
+                          <div className="space-y-2">
+                            <p className="text-navy font-bold">{monthlyWritings.length}편 작성</p>
+                            {monthlyWritings.slice(0, 3).map(w => (
+                              <div key={w.id} className="flex items-center justify-between text-sm bg-gray-50 rounded-xl px-4 py-2.5">
+                                <span className="text-navy font-medium truncate">{w.title} <span className="text-gray-400 text-xs">· {w.genre}</span></span>
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ml-2 ${w.status === 'TEACHER_CONFIRMED' ? 'bg-primary/10 text-primary' : 'bg-indigo-50 text-indigo-500'}`}>
+                                  {w.status === 'TEACHER_CONFIRMED' ? '피드백 완료' : 'AI 분석됨'}
+                                </span>
+                              </div>
+                            ))}
                           </div>
                         )}
                       </div>

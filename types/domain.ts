@@ -81,6 +81,46 @@ export interface OperationManual {
     updatedBy: string;   // 작성/수정한 관리자 이름
 }
 
+// --- 학생 글쓰기 (핵심 루프: 제출 → AI 루브릭 분석 → 교사 확인 → 학부모 리포트) ---
+export type WritingStatus = 'SUBMITTED' | 'AI_REVIEWED' | 'TEACHER_CONFIRMED';
+
+export const WRITING_GENRES = ['독서감상문', '일기·생활문', '설명하는 글', '주장하는 글', '기타'] as const;
+export type WritingGenre = typeof WRITING_GENRES[number];
+
+export const WRITING_RUBRIC_CRITERIA = ['내용·생각', '글의 짜임', '표현력', '맞춤법·어법'] as const;
+export type WritingRubricCriterion = typeof WRITING_RUBRIC_CRITERIA[number];
+
+export interface WritingRubricScore {
+    criterion: WritingRubricCriterion;
+    score: number;   // 1~5
+    comment: string; // 해당 기준에 대한 구체 피드백
+}
+
+export interface WritingAiReview {
+    rubric: WritingRubricScore[];
+    overall: string;      // 총평 (학생에게 보여줄 따뜻한 어조)
+    strengths: string;    // 잘한 점
+    improvements: string; // 다음에 시도해볼 것
+    reviewedAt: string;
+}
+
+export interface Writing {
+    id: string;
+    studentUid: string;
+    studentName: string;
+    academyId: string;      // 지점 격리용
+    gradeGroup: GradeGroupType;
+    title: string;
+    content: string;
+    genre: WritingGenre;
+    submittedAt: string;
+    status: WritingStatus;
+    aiReview?: WritingAiReview;
+    teacherComment?: string; // 교사 최종 코멘트 (확인 완료 시)
+    confirmedAt?: string;
+    confirmedBy?: string;    // 확인한 교사 이름
+}
+
 // --- 교사 품질 점검 (워터폴 2순위: 교사 품질 관리) ---
 export const QUALITY_CHECK_CRITERIA = ['수업 준비도', '피드백 충실도', '학생 소통', '진도 관리'] as const;
 export type QualityCheckCriterion = typeof QUALITY_CHECK_CRITERIA[number];

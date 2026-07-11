@@ -796,6 +796,18 @@ export const TeacherQualityService = {
     }
   },
 
+  // 원장용: 우리 학원 교사들의 점검 기록 조회
+  async getByAcademy(academyId: string): Promise<TeacherQualityCheck[]> {
+    try {
+      const q = query(collection(db, QUALITY_CHECKS_COLLECTION), where('academyId', '==', academyId));
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(d => d.data() as TeacherQualityCheck);
+    } catch (error) {
+      console.error('Get quality checks by academy error:', error);
+      return [];
+    }
+  },
+
   async getByTeacher(teacherUid: string): Promise<TeacherQualityCheck[]> {
     try {
       const q = query(collection(db, QUALITY_CHECKS_COLLECTION), where('teacherUid', '==', teacherUid));

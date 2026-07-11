@@ -31,6 +31,11 @@ service cloud.firestore {
         && callerProfile().academyId == academyId;
     }
 
+    // 원장(학원 관리자): 해당 학원 소속 + isAcademyAdmin 플래그
+    function isDirectorOfAcademy(academyId) {
+      return isTeacherOfAcademy(academyId) && callerProfile().isAcademyAdmin == true;
+    }
+
     // --- users: 학생/선생님/관리자 프로필 ---
     match /users/{userId} {
       allow read: if isSignedIn() && (
@@ -40,8 +45,12 @@ service cloud.firestore {
       );
       // 본인 uid로만 최초 생성 가능 (가입 흐름)
       allow create: if isSignedIn() && request.auth.uid == userId;
-      // 본인 또는 관리자만 수정 가능 (선생님은 학생 정보를 직접 고칠 수 없음)
-      allow update: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      // 본인, 관리자, 또는 같은 학원의 원장(등록 과정 관리 등)만 수정 가능
+      allow update: if isSignedIn() && (
+        request.auth.uid == userId ||
+        isAdmin() ||
+        isDirectorOfAcademy(resource.data.academyId)
+      );
       allow delete: if isAdmin();
     }
 
@@ -81,9 +90,13 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // --- teacher_quality_checks: 교사 수업 품질 점검 (관리자가 작성, 본인 교사만 열람) ---
+    // --- teacher_quality_checks: 교사 수업 품질 점검 (관리자가 작성, 본인 교사와 소속 학원 원장이 열람) ---
     match /teacher_quality_checks/{checkId} {
-      allow read: if isSignedIn() && (isAdmin() || resource.data.teacherUid == request.auth.uid);
+      allow read: if isSignedIn() && (
+        isAdmin() ||
+        resource.data.teacherUid == request.auth.uid ||
+        isDirectorOfAcademy(resource.data.academyId)
+      );
       allow write: if isAdmin();
     }
 

@@ -4,6 +4,7 @@ import { SessionService, AssetService, ConsultationService, ManualService, Teach
 import { generateContent } from '../services/gemini';
 import { getGradeSegment } from '../data/gradeSegments';
 import ReportView from './ReportView'; // 상담 모드에서 재사용
+import DirectorOpsTab from './DirectorOpsTab';
 
 interface TeacherDashboardProps {
     user: UserAccount;
@@ -16,11 +17,12 @@ import { AuthService } from '../services/api';
 const MANUAL_CATEGORIES: ManualCategory[] = ['신규 상담 대응', '학부모 불만 대응', '모집·홍보', '재등록 관리', '교사 관리', '지점 운영'];
 
 const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ user, onLogout }) => {
-    const [activeTab, setActiveTab] = useState<'briefing' | 'students' | 'consultation' | 'manuals' | 'marketing'>('briefing');
+    const [activeTab, setActiveTab] = useState<'briefing' | 'students' | 'consultation' | 'manuals' | 'marketing' | 'director'>('briefing');
     const [selectedStudent, setSelectedStudent] = useState<UserAccount | null>(null);
     const [students, setStudents] = useState<UserAccount[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [pendingRequests, setPendingRequests] = useState<ConsultationRequest[]>([]);
+    const [studentsReloadKey, setStudentsReloadKey] = useState(0);
     const [manuals, setManuals] = useState<OperationManual[]>([]);
     const [openManualId, setOpenManualId] = useState<string | null>(null);
     const [myQualityChecks, setMyQualityChecks] = useState<TeacherQualityCheck[]>([]);
@@ -153,7 +155,7 @@ ${result?.teacherNote ? `- 선생님 관찰 노트: ${result.teacherNote}` : ''}
         if (user.role === 'TEACHER') {
             loadStudents();
         }
-    }, [user.academyId, user.role]);
+    }, [user.academyId, user.role, studentsReloadKey]);
 
     useEffect(() => {
         const loadRequests = async () => {
@@ -356,6 +358,15 @@ ${result?.teacherNote ? `- 선생님 관찰 노트: ${result.teacherNote}` : ''}
                         <span className="material-symbols-outlined">campaign</span>
                         홍보 도구
                     </button>
+                    {user.isAcademyAdmin && (
+                        <button
+                            onClick={() => setActiveTab('director')}
+                            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors font-bold ${activeTab === 'director' ? 'bg-navy text-white shadow-lg shadow-navy/30' : 'text-gray-400 hover:bg-gray-50'}`}
+                        >
+                            <span className="material-symbols-outlined">storefront</span>
+                            지점 운영
+                        </button>
+                    )}
                 </nav>
 
                 <div className="mt-auto pt-10 border-t border-gray-100">
@@ -700,6 +711,14 @@ ${result?.teacherNote ? `- 선생님 관찰 노트: ${result.teacherNote}` : ''}
                             </div>
                         )}
                     </div>
+                )}
+                {activeTab === 'director' && user.isAcademyAdmin && (
+                    <DirectorOpsTab
+                        user={user}
+                        students={students}
+                        pendingRequests={pendingRequests}
+                        onStudentsChanged={() => setStudentsReloadKey(k => k + 1)}
+                    />
                 )}
             </main>
 

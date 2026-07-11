@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { runGeneration, toCleanErrorMessage } from './_lib/generate';
+// Vercel의 Node ESM 런타임은 상대 경로 import에 확장자를 요구한다 (.js가 컴파일된 _lib/generate.ts로 매핑됨)
+import { runGeneration, toCleanErrorMessage } from './_lib/generate.js';
 
 // AI Gateway 경유 생성 프록시
 // - Vercel 배포: OIDC 자동 인증 (프로젝트 설정에서 AI Gateway 활성화 필요)

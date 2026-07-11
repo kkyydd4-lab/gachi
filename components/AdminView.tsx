@@ -276,7 +276,9 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack, adminName = '관리자' }
   };
 
   const totalQuestions = Object.values(config.countPerCategory).reduce((a, b) => (a as number) + (b as number), 0);
-  const filteredAssets = assets.filter(a => (filterStatus === 'ALL' || a.status === filterStatus));
+  // status 필드가 없는 레거시 자산은 학생에게 실제 서비스 중(REJECTED만 제외하는 서빙 로직)이므로
+  // 검토 화면에서는 APPROVED로 취급해 노출한다 — 안 그러면 검토/반려가 불가능한 콘텐츠가 생김
+  const filteredAssets = assets.filter(a => (filterStatus === 'ALL' || (a.status ?? 'APPROVED') === filterStatus));
 
   return (
     <div className="flex flex-col min-h-screen bg-[#F1F5F9] font-display">

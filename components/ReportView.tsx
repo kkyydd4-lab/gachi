@@ -45,8 +45,19 @@ const ReportView: React.FC<ReportViewProps> = ({ user, onLogout, onStartTest, is
   };
 
   // MVP v2: 설문 상태 관리
-  const [showSurvey, setShowSurvey] = useState(true);
+  // 방금 마친 테스트 세션이 있고, 그 세션에 대해 아직 제출/스킵하지 않았을 때만 노출
+  // (이전에는 초기값이 항상 true라 리포트를 열 때마다 설문이 반복해서 떴음)
+  const lastSessionId = typeof window !== 'undefined' ? sessionStorage.getItem('last_session_id') : null;
+  const surveyDoneKey = lastSessionId ? `survey_done_${lastSessionId}` : null;
+  const [showSurvey, setShowSurvey] = useState(() =>
+    !isTeacherView && !!surveyDoneKey && localStorage.getItem(surveyDoneKey) !== '1'
+  );
   const [surveySubmitted, setSurveySubmitted] = useState(false);
+
+  const markSurveyDone = () => {
+    if (surveyDoneKey) localStorage.setItem(surveyDoneKey, '1');
+    setShowSurvey(false);
+  };
 
   // 오답 복습 모드
   const [retryMode, setRetryMode] = useState(false);
@@ -73,13 +84,11 @@ const ReportView: React.FC<ReportViewProps> = ({ user, onLogout, onStartTest, is
 
   // 설문 제출 핸들러
   const handleSurveySubmit = async (survey: PostTestSurvey) => {
-    // sessionStorage에서 sessionId 가져오기
-    const savedSession = sessionStorage.getItem('last_session_id');
-    if (savedSession) {
-      await SessionService.addSurvey(savedSession, survey);
+    if (lastSessionId) {
+      await SessionService.addSurvey(lastSessionId, survey);
     }
     setSurveySubmitted(true);
-    setShowSurvey(false);
+    markSurveyDone();
   };
 
   const displayCompetencies = user?.testResult?.competencies || [
@@ -875,7 +884,7 @@ const ReportView: React.FC<ReportViewProps> = ({ user, onLogout, onStartTest, is
               <PostTestSurveyForm
                 isVisible={showSurvey}
                 onSubmit={handleSurveySubmit}
-                onSkip={() => setShowSurvey(false)}
+                onSkip={markSurveyDone}
               />
             )}
 

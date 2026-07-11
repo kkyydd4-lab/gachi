@@ -605,6 +605,17 @@ export const AcademyService = {
     }
   },
 
+  // 단건 조회 (선생님이 자기 학원의 가입 코드를 확인할 때 사용)
+  async getAcademyById(id: string): Promise<Academy | null> {
+    try {
+      const snap = await getDoc(doc(db, ACADEMIES_COLLECTION, id));
+      return snap.exists() ? (snap.data() as Academy) : null;
+    } catch (error) {
+      console.error('Get academy by id error:', error);
+      return null;
+    }
+  },
+
   // 학원 코드 검증
   async validateAcademyCode(code: string): Promise<Academy | null> {
     try {

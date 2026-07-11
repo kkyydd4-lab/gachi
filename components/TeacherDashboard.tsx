@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { UserAccount, TestResult, GradeGroupType, Asset, ConsultationRequest, OperationManual, ManualCategory, TeacherQualityCheck, QUALITY_CHECK_CRITERIA } from '../types';
-import { SessionService, AssetService, ConsultationService, ManualService, TeacherQualityService } from '../services/api';
+import { SessionService, AssetService, ConsultationService, ManualService, TeacherQualityService, AcademyService } from '../services/api';
 import { generateContent } from '../services/gemini';
 import { getGradeSegment } from '../data/gradeSegments';
 import ReportView from './ReportView'; // 상담 모드에서 재사용
@@ -29,6 +29,19 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ user, onLogout }) =
     const [consultScript, setConsultScript] = useState('');
     const [isGeneratingScript, setIsGeneratingScript] = useState(false);
     const [scriptError, setScriptError] = useState('');
+
+    // 학생 초대 (학원 가입 코드 안내)
+    const [inviteCode, setInviteCode] = useState<string | null>(null);
+    const [showInviteModal, setShowInviteModal] = useState(false);
+    const [inviteCopied, setInviteCopied] = useState(false);
+
+    const openInviteModal = async () => {
+        setShowInviteModal(true);
+        setInviteCopied(false);
+        if (inviteCode || !user.academyId) return;
+        const academy = await AcademyService.getAcademyById(user.academyId);
+        setInviteCode(academy?.code || null);
+    };
 
     // 홍보문 생성 도구
     const [marketingType, setMarketingType] = useState<'블로그 글' | '학부모 안내 문자' | '설명회 안내문'>('블로그 글');
@@ -177,13 +190,24 @@ ${result?.teacherNote ? `- 선생님 관찰 노트: ${result.teacherNote}` : ''}
         }
     }, [user.uid, user.role]);
 
-    const openConsultationFromRequest = async (req: ConsultationRequest) => {
+    // 상담 시작: 요청은 대기 목록에 그대로 두고 상담 모드만 연다 (완료 처리는 별도 버튼)
+    const openConsultationFromRequest = (req: ConsultationRequest) => {
         const student = students.find(s => s.uid === req.studentUid);
-        if (student) {
-            openConsultation(student);
+        if (!student) {
+            alert(`${req.studentName} 학생을 담당 목록에서 찾을 수 없습니다.\n학생의 소속 학원이 아직 지정되지 않았을 수 있으니 본사에 확인해주세요.`);
+            return;
         }
-        await ConsultationService.markResolved(req.id);
-        setPendingRequests(prev => prev.filter(r => r.id !== req.id));
+        openConsultation(student);
+    };
+
+    // 상담 완료: 요청을 처리 완료로 표시하고 목록에서 제거
+    const resolveConsultationRequest = async (req: ConsultationRequest) => {
+        const ok = await ConsultationService.markResolved(req.id);
+        if (ok) {
+            setPendingRequests(prev => prev.filter(r => r.id !== req.id));
+        } else {
+            alert('완료 처리에 실패했습니다. 잠시 후 다시 시도해주세요.');
+        }
     };
 
     // Care Zone 계산 (60점 미만 항목)
@@ -305,6 +329,11 @@ ${result?.teacherNote ? `- 선생님 관찰 노트: ${result.teacherNote}` : ''}
                     >
                         <span className="material-symbols-outlined">analytics</span>
                         수업 브리핑
+                        {pendingRequests.length > 0 && (
+                            <span className={`ml-auto text-xs font-black min-w-[20px] h-5 px-1.5 rounded-full flex items-center justify-center ${activeTab === 'briefing' ? 'bg-white text-secondary' : 'bg-secondary text-white'}`}>
+                                {pendingRequests.length}
+                            </span>
+                        )}
                     </button>
                     <button
                         onClick={() => setActiveTab('students')}
@@ -404,12 +433,21 @@ ${result?.teacherNote ? `- 선생님 관찰 노트: ${result.teacherNote}` : ''}
                                                 <p className="font-bold text-navy">{req.studentName}</p>
                                                 <p className="text-xs text-gray-400">{new Date(req.requestedAt).toLocaleString()} 신청</p>
                                             </div>
-                                            <button
-                                                onClick={() => openConsultationFromRequest(req)}
-                                                className="text-secondary font-bold text-sm bg-white border border-gray-200 px-3 py-1.5 rounded-lg hover:bg-secondary hover:text-white hover:border-secondary transition-all shadow-sm"
-                                            >
-                                                상담 시작
-                                            </button>
+                                            <div className="flex items-center gap-2">
+                                                <button
+                                                    onClick={() => openConsultationFromRequest(req)}
+                                                    className="text-secondary font-bold text-sm bg-white border border-gray-200 px-3 py-1.5 rounded-lg hover:bg-secondary hover:text-white hover:border-secondary transition-all shadow-sm"
+                                                >
+                                                    상담 시작
+                                                </button>
+                                                <button
+                                                    onClick={() => resolveConsultationRequest(req)}
+                                                    className="text-gray-400 font-bold text-sm bg-white border border-gray-200 px-3 py-1.5 rounded-lg hover:bg-primary hover:text-white hover:border-primary transition-all shadow-sm"
+                                                    title="상담을 마쳤다면 완료 처리하세요"
+                                                >
+                                                    완료
+                                                </button>
+                                            </div>
                                         </div>
                                     ))}
                                 </div>
@@ -483,7 +521,10 @@ ${result?.teacherNote ? `- 선생님 관찰 노트: ${result.teacherNote}` : ''}
                                 <h2 className="text-2xl font-black text-navy mb-2">담당 학생 관리 👨‍🎓</h2>
                                 <p className="text-gray-500">총 {students.length}명의 학생을 관리 중입니다.</p>
                             </div>
-                            <button className="bg-navy text-white px-5 py-3 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-navy/20 hover:bg-navy/90 transition-all">
+                            <button
+                                onClick={openInviteModal}
+                                className="bg-navy text-white px-5 py-3 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-navy/20 hover:bg-navy/90 transition-all"
+                            >
                                 <span className="material-symbols-outlined">person_add</span>
                                 학생 초대
                             </button>
@@ -661,6 +702,42 @@ ${result?.teacherNote ? `- 선생님 관찰 노트: ${result.teacherNote}` : ''}
                     </div>
                 )}
             </main>
+
+            {/* 학생 초대 모달: 학원 가입 코드 안내 */}
+            {showInviteModal && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[70] flex items-center justify-center p-4" onClick={() => setShowInviteModal(false)}>
+                    <div className="bg-white rounded-[2rem] w-full max-w-md overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
+                        <div className="p-6 border-b border-gray-100 bg-navy text-white flex justify-between items-center">
+                            <h3 className="font-bold text-lg">학생 초대하기</h3>
+                            <button onClick={() => setShowInviteModal(false)}><span className="material-symbols-outlined">close</span></button>
+                        </div>
+                        <div className="p-8 text-center space-y-5">
+                            {!user.academyId ? (
+                                <p className="text-gray-500 font-medium">소속 학원이 지정되지 않은 계정입니다.<br />본사에 학원 지정을 요청해주세요.</p>
+                            ) : inviteCode === null ? (
+                                <p className="text-gray-400 font-medium">가입 코드를 불러오는 중...</p>
+                            ) : (
+                                <>
+                                    <p className="text-gray-500 font-medium leading-relaxed">
+                                        학생(학부모)에게 아래 <b className="text-navy">학원 가입 코드</b>를 전달해주세요.<br />
+                                        회원가입 시 이 코드를 입력하면 우리 학원 소속으로 등록됩니다.
+                                    </p>
+                                    <div className="bg-indigo-50 border-2 border-dashed border-indigo-200 rounded-2xl py-6">
+                                        <p className="text-3xl font-black text-indigo-600 tracking-widest font-mono">{inviteCode}</p>
+                                    </div>
+                                    <button
+                                        onClick={() => { navigator.clipboard?.writeText(inviteCode); setInviteCopied(true); }}
+                                        className="w-full py-3.5 bg-navy text-white rounded-xl font-bold hover:bg-navy/90 transition-colors flex items-center justify-center gap-2"
+                                    >
+                                        <span className="material-symbols-outlined text-sm">{inviteCopied ? 'check' : 'content_copy'}</span>
+                                        {inviteCopied ? '복사되었습니다' : '코드 복사하기'}
+                                    </button>
+                                </>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

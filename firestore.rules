@@ -116,6 +116,17 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // --- reading_logs: 독서 이력 (학생 본인이 기록, 교사는 열람) ---
+    match /reading_logs/{logId} {
+      allow read: if isSignedIn() && (
+        isAdmin() ||
+        resource.data.studentUid == request.auth.uid ||
+        isTeacherOfAcademy(resource.data.academyId)
+      );
+      allow create: if isSignedIn() && request.resource.data.studentUid == request.auth.uid;
+      allow update, delete: if isSignedIn() && (isAdmin() || resource.data.studentUid == request.auth.uid);
+    }
+
     // --- manuals: 가맹 운영 매뉴얼 (본사가 작성, 선생님/원장이 열람) ---
     match /manuals/{manualId} {
       allow read: if isSignedIn() && (isAdmin() || callerProfile().role == 'TEACHER');

@@ -8,6 +8,7 @@ import DiagnosticView from '@/components/DiagnosticView';
 import AdminView from '@/components/AdminView';
 import TeacherDashboard from '@/components/TeacherDashboard';
 import WritingView from '@/components/WritingView';
+import ReadingLogView from '@/components/ReadingLogView';
 import { UserAccount } from '@/types';
 import { AuthService } from '@/services/api';
 import { useAuthStore } from '@/stores/useAuthStore';
@@ -85,9 +86,11 @@ const App: React.FC = () => {
 
         <Route path="/diagnostic" element={currentUser ? <DiagnosticView user={currentUser} onComplete={handleTestComplete} onCancel={() => navigate('/report')} /> : <Navigate to="/login" />} />
 
-        <Route path="/report" element={currentUser ? <ReportView user={currentUser} currentView="REPORT" setView={(view: any) => navigate(view === 'DIAGNOSTIC' ? '/diagnostic' : '/report')} onLogout={handleLogout} onStartTest={() => navigate('/diagnostic')} onOpenWriting={() => navigate('/writing')} /> : <Navigate to="/login" />} />
+        <Route path="/report" element={currentUser ? <ReportView user={currentUser} currentView="REPORT" setView={(view: any) => navigate(view === 'DIAGNOSTIC' ? '/diagnostic' : '/report')} onLogout={handleLogout} onStartTest={() => navigate('/diagnostic')} onOpenWriting={() => navigate('/writing')} onOpenReading={(book) => navigate('/reading', { state: book })} /> : <Navigate to="/login" />} />
 
         <Route path="/writing" element={currentUser ? <WritingView user={currentUser} onBack={() => navigate('/report')} /> : <Navigate to="/login" />} />
+
+        <Route path="/reading" element={currentUser ? <ReadingLogView user={currentUser} onBack={() => navigate('/report')} /> : <Navigate to="/login" />} />
 
         <Route path="/admin" element={currentUser && currentUser.role === 'ADMIN' ? <AdminView onBack={handleLogout} adminName={currentUser.name} /> : <Navigate to={currentUser ? "/" : "/login"} />} />
 

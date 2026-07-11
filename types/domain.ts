@@ -121,6 +121,21 @@ export interface Writing {
     confirmedBy?: string;    // 확인한 교사 이름
 }
 
+// --- 독서 이력 (읽은 책 기록 — 월간 리포트 "이번 달 읽은 책"의 원천 데이터) ---
+export interface ReadingLog {
+    id: string;
+    studentUid: string;
+    studentName: string;
+    academyId: string;
+    bookTitle: string;
+    author?: string;
+    finishedAt: string;   // 다 읽은 날 (YYYY-MM-DD)
+    rating: number;       // 1~5 별점
+    review?: string;      // 한줄평
+    fromRecommendation?: boolean; // AI 추천 도서에서 "읽었어요"로 기록된 경우
+    createdAt: string;
+}
+
 // --- 교사 품질 점검 (워터폴 2순위: 교사 품질 관리) ---
 export const QUALITY_CHECK_CRITERIA = ['수업 준비도', '피드백 충실도', '학생 소통', '진도 관리'] as const;
 export type QualityCheckCriterion = typeof QUALITY_CHECK_CRITERIA[number];

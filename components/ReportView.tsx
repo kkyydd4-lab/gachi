@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { ViewState, UserAccount, WrongAnswerRecord, PostTestSurvey, Writing } from '../types';
-import { SessionService, ConsultationService, AuthService, WritingService } from '../services/api';
+import { ViewState, UserAccount, WrongAnswerRecord, PostTestSurvey, Writing, ReadingLog } from '../types';
+import { SessionService, ConsultationService, AuthService, WritingService, ReadingLogService } from '../services/api';
 import { PostTestSurveyForm } from './MicroSurvey';
 import { getGradeSegment } from '../data/gradeSegments';
 import {
@@ -15,12 +15,13 @@ interface ReportViewProps {
   onLogout: () => void;
   onStartTest: () => void;
   onOpenWriting?: () => void; // 글쓰기 노트 화면으로 이동
+  onOpenReading?: (book?: { bookTitle: string; author?: string }) => void; // 독서 기록장으로 이동 (추천 도서 프리필 지원)
   isTeacherView?: boolean; // 선생님 상담 모드에서 렌더링될 때 true (코멘트 작성 가능)
 }
 
 const LOGO_URL = "https://lh3.googleusercontent.com/u/0/d/16S6A8l-NgtMiOb8mjf1-hLv0AgxnX-dc=w1000-h1000";
 
-const ReportView: React.FC<ReportViewProps> = ({ user, onLogout, onStartTest, onOpenWriting, isTeacherView = false }) => {
+const ReportView: React.FC<ReportViewProps> = ({ user, onLogout, onStartTest, onOpenWriting, onOpenReading, isTeacherView = false }) => {
   const hasResult = !!user?.testResult;
   const bookSectionRef = useRef<HTMLDivElement>(null);
 
@@ -211,19 +212,25 @@ const ReportView: React.FC<ReportViewProps> = ({ user, onLogout, onStartTest, on
   const expertOpinion = generateExpertOpinion();
   const gradeSegment = getGradeSegment(user?.grade || '');
 
-  // 이번 달 쓴 글 (월간 리포트 항목)
+  // 이번 달 쓴 글 + 읽은 책 (월간 리포트 항목)
   const [monthlyWritings, setMonthlyWritings] = useState<Writing[]>([]);
+  const [monthlyReadings, setMonthlyReadings] = useState<ReadingLog[]>([]);
   useEffect(() => {
-    const loadWritings = async () => {
+    const loadMonthly = async () => {
       if (!user?.uid) return;
-      const all = await WritingService.getByStudent(user.uid);
       const now = new Date();
-      setMonthlyWritings(all.filter(w => {
-        const d = new Date(w.submittedAt);
+      const thisMonth = (dateStr: string) => {
+        const d = new Date(dateStr);
         return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
-      }));
+      };
+      const [allWritings, allReadings] = await Promise.all([
+        WritingService.getByStudent(user.uid),
+        ReadingLogService.getByStudent(user.uid),
+      ]);
+      setMonthlyWritings(allWritings.filter(w => thisMonth(w.submittedAt)));
+      setMonthlyReadings(allReadings.filter(r => thisMonth(r.finishedAt)));
     };
-    loadWritings();
+    loadMonthly();
   }, [user?.uid]);
 
   // 월간 리포트 항목 6: "글쓰기에서 좋아진 점" — 직전 회차 대비 향상된 역량 (이력이 있을 때만)
@@ -257,6 +264,7 @@ const ReportView: React.FC<ReportViewProps> = ({ user, onLogout, onStartTest, on
             { icon: 'dashboard', label: '성장 대시보드', active: true, onClick: undefined, comingSoon: false },
             { icon: 'quiz', label: '문해력 평가', active: false, onClick: onStartTest, comingSoon: false },
             { icon: 'edit_note', label: '글쓰기 노트', active: false, onClick: onOpenWriting, comingSoon: !onOpenWriting },
+            { icon: 'book_2', label: '독서 기록장', active: false, onClick: onOpenReading ? () => onOpenReading() : undefined, comingSoon: !onOpenReading },
             {
               icon: 'auto_stories', label: 'AI 맞춤 도서', active: false, comingSoon: false,
               onClick: hasResult ? () => bookSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }) : undefined
@@ -561,6 +569,36 @@ const ReportView: React.FC<ReportViewProps> = ({ user, onLogout, onStartTest, on
                         )}
                       </div>
 
+                      {/* 이번 달 읽은 책 */}
+                      <div className="bg-white rounded-2xl p-6 border border-gray-100">
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-sm text-gray-400 font-bold flex items-center gap-2">
+                            <span className="material-symbols-outlined text-primary">auto_stories</span>
+                            이번 달 읽은 책
+                          </p>
+                          {onOpenReading && (
+                            <button onClick={() => onOpenReading()} className="text-xs font-bold text-primary hover:underline">
+                              독서 기록장 열기 →
+                            </button>
+                          )}
+                        </div>
+                        {monthlyReadings.length === 0 ? (
+                          <p className="text-navy font-medium leading-relaxed">
+                            이번 달 기록된 책이 아직 없어요. {onOpenReading ? '다 읽은 책을 기록해보세요!' : ''}
+                          </p>
+                        ) : (
+                          <div className="space-y-2">
+                            <p className="text-navy font-bold">{monthlyReadings.length}권 완독</p>
+                            {monthlyReadings.slice(0, 3).map(r => (
+                              <div key={r.id} className="flex items-center justify-between text-sm bg-gray-50 rounded-xl px-4 py-2.5">
+                                <span className="text-navy font-medium truncate">{r.bookTitle}{r.author ? <span className="text-gray-400 text-xs"> · {r.author}</span> : null}</span>
+                                <span className="text-amber-400 text-xs font-bold shrink-0 ml-2">{'★'.repeat(r.rating)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
                       {/* 이번 달 쓴 글 */}
                       <div className="bg-white rounded-2xl p-6 border border-gray-100">
                         <div className="flex items-center justify-between mb-2">
@@ -664,6 +702,15 @@ const ReportView: React.FC<ReportViewProps> = ({ user, onLogout, onStartTest, on
                               <p className="text-navy font-black text-lg mb-1">{book.title}</p>
                               <p className="text-gray-400 text-xs font-bold mb-2">{book.author}</p>
                               <p className="text-gray-500 text-sm leading-snug">{book.reason}</p>
+                              {onOpenReading && !isTeacherView && (
+                                <button
+                                  onClick={() => onOpenReading({ bookTitle: book.title, author: book.author })}
+                                  className="mt-3 text-xs font-bold text-green-600 bg-green-50 hover:bg-green-100 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
+                                >
+                                  <span className="material-symbols-outlined text-sm">check_circle</span>
+                                  다 읽었어요! 기록하기
+                                </button>
+                              )}
                             </div>
                           ))}
                         </div>

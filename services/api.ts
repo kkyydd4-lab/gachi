@@ -1,5 +1,5 @@
 // Firebase 기반 API 서비스
-import { UserAccount, Asset, AdminConfig, GradeGroupType, TestSession, PostTestSurvey, Academy, GradeCurriculumConfig, LearningSession, LearningSessionStatus, ConsultationRequest, OperationManual, TeacherQualityCheck, Writing, WritingAiReview } from '../types';
+import { UserAccount, Asset, AdminConfig, GradeGroupType, TestSession, PostTestSurvey, Academy, GradeCurriculumConfig, LearningSession, LearningSessionStatus, ConsultationRequest, OperationManual, TeacherQualityCheck, Writing, WritingAiReview, ReadingLog } from '../types';
 import { auth, db } from './firebase';
 import {
   signInWithEmailAndPassword,
@@ -777,6 +777,44 @@ export const ManualService = {
       return true;
     } catch (error) {
       console.error('Delete manual error:', error);
+      return false;
+    }
+  }
+};
+
+// --- ReadingLog Service (독서 이력) ---
+const READING_LOGS_COLLECTION = 'reading_logs';
+
+export const ReadingLogService = {
+  async create(log: ReadingLog): Promise<boolean> {
+    try {
+      await setDoc(doc(db, READING_LOGS_COLLECTION, log.id), log);
+      return true;
+    } catch (error) {
+      console.error('Create reading log error:', error);
+      return false;
+    }
+  },
+
+  async getByStudent(studentUid: string): Promise<ReadingLog[]> {
+    try {
+      const q = query(collection(db, READING_LOGS_COLLECTION), where('studentUid', '==', studentUid));
+      const snapshot = await getDocs(q);
+      return snapshot.docs
+        .map(d => d.data() as ReadingLog)
+        .sort((a, b) => b.finishedAt.localeCompare(a.finishedAt));
+    } catch (error) {
+      console.error('Get reading logs error:', error);
+      return [];
+    }
+  },
+
+  async delete(id: string): Promise<boolean> {
+    try {
+      await deleteDoc(doc(db, READING_LOGS_COLLECTION, id));
+      return true;
+    } catch (error) {
+      console.error('Delete reading log error:', error);
       return false;
     }
   }

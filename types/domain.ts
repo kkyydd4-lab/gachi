@@ -121,6 +121,26 @@ export interface Writing {
     confirmedBy?: string;    // 확인한 교사 이름
 }
 
+// --- 진로·적성 리포트 (역량 + 글쓰기 + 독서 데이터 종합 — 4대 목적의 마지막 축) ---
+export interface CareerReport {
+    generatedAt: string;
+    frame: '흥미·강점 발견' | '진로 탐색'; // 초등 / 중등
+    headline: string;              // 한 줄 요약 (예: "이야기를 만들고 전달하는 힘이 자라는 아이")
+    observedInterests: string[];   // 관찰된 흥미 키워드
+    strengthProfile: string;       // 강점 프로필 서술
+    suggestedFields: {
+        name: string;              // 분야/직업군
+        reason: string;            // 데이터 근거
+        activities: string;        // 지금 해볼 수 있는 활동
+    }[];
+    parentGuide: string;           // 학부모 가이드
+    dataSnapshot: {                // 생성 당시 데이터 규모 (신뢰도 표시용)
+        testCount: number;
+        writingCount: number;
+        readingCount: number;
+    };
+}
+
 // --- 독서 이력 (읽은 책 기록 — 월간 리포트 "이번 달 읽은 책"의 원천 데이터) ---
 export interface ReadingLog {
     id: string;
@@ -178,6 +198,7 @@ export interface UserAccount {
     uid?: string;       // Firebase Document ID (for updates/deletes)
     parentPhone?: string; // 학부모 연락처
     program?: ProgramEnrollment; // 등록된 연간 성장 프로그램 (학생)
+    careerReport?: CareerReport; // 최신 진로·적성 리포트
 }
 
 export interface Question {

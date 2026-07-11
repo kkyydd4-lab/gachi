@@ -16,12 +16,13 @@ interface ReportViewProps {
   onStartTest: () => void;
   onOpenWriting?: () => void; // 글쓰기 노트 화면으로 이동
   onOpenReading?: (book?: { bookTitle: string; author?: string }) => void; // 독서 기록장으로 이동 (추천 도서 프리필 지원)
+  onOpenCareer?: () => void; // 진로·적성 리포트로 이동
   isTeacherView?: boolean; // 선생님 상담 모드에서 렌더링될 때 true (코멘트 작성 가능)
 }
 
 const LOGO_URL = "https://lh3.googleusercontent.com/u/0/d/16S6A8l-NgtMiOb8mjf1-hLv0AgxnX-dc=w1000-h1000";
 
-const ReportView: React.FC<ReportViewProps> = ({ user, onLogout, onStartTest, onOpenWriting, onOpenReading, isTeacherView = false }) => {
+const ReportView: React.FC<ReportViewProps> = ({ user, onLogout, onStartTest, onOpenWriting, onOpenReading, onOpenCareer, isTeacherView = false }) => {
   const hasResult = !!user?.testResult;
   const bookSectionRef = useRef<HTMLDivElement>(null);
 
@@ -265,6 +266,7 @@ const ReportView: React.FC<ReportViewProps> = ({ user, onLogout, onStartTest, on
             { icon: 'quiz', label: '문해력 평가', active: false, onClick: onStartTest, comingSoon: false },
             { icon: 'edit_note', label: '글쓰기 노트', active: false, onClick: onOpenWriting, comingSoon: !onOpenWriting },
             { icon: 'book_2', label: '독서 기록장', active: false, onClick: onOpenReading ? () => onOpenReading() : undefined, comingSoon: !onOpenReading },
+            { icon: 'explore', label: '진로 탐색', active: false, onClick: onOpenCareer, comingSoon: !onOpenCareer },
             {
               icon: 'auto_stories', label: 'AI 맞춤 도서', active: false, comingSoon: false,
               onClick: hasResult ? () => bookSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }) : undefined

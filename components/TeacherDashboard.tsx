@@ -246,10 +246,10 @@ ${result?.teacherNote ? `- 선생님 관찰 노트: ${result.teacherNote}` : ''}
         }
     };
 
-    // Care Zone 계산 (60점 미만 항목)
+    // Care Zone 계산 (실제 평가된 역량 중 60점 미만 — 0문항 미평가 역량은 제외)
     const getCareZones = (result?: TestResult) => {
         if (!result) return [];
-        return result.competencies.filter(c => c.score < 60).map(c => c.label);
+        return result.competencies.filter(c => c.total > 0 && c.score < 60).map(c => c.label);
     };
 
     const activeCareStudents = students.filter(s => getCareZones(s.testResult).length > 0);

@@ -6,8 +6,10 @@ service firebase.storage {
   match /b/{bucket}/o {
     // writings/{학생uid}/{writingId}/{n}.jpg
     match /writings/{userId}/{allPaths=**} {
-      // 로그인한 사용자는 열람 가능 (교사가 원본 확인)
-      allow read: if request.auth != null;
+      // SDK 직접 읽기는 본인만. 교사는 Firestore(writings 문서, 학원 격리 적용)에
+      // 저장된 토큰 포함 다운로드 URL로만 열람 — Storage 규칙만으로는 호출자의
+      // 소속 학원을 판별할 수 없어(교차 조회 불가) 이렇게 격리한다.
+      allow read: if request.auth != null && request.auth.uid == userId;
       // 본인 폴더에만 업로드, 이미지 5MB 이하
       allow write: if request.auth != null
         && request.auth.uid == userId

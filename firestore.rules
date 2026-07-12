@@ -44,19 +44,28 @@ service cloud.firestore {
         isTeacherOfAcademy(resource.data.academyId)
       );
       // 본인 uid로만 최초 생성 가능 (가입 흐름)
-      allow create: if isSignedIn() && request.auth.uid == userId;
+      // ⚠️ role 에스컬레이션 차단: 가입으로는 STUDENT/TEACHER만 가능하며
+      //    원장 플래그(isAcademyAdmin)도 스스로 부여할 수 없다. ADMIN은 관리자만 생성.
+      allow create: if isSignedIn() && request.auth.uid == userId
+        && request.resource.data.role in ['STUDENT', 'TEACHER']
+        && request.resource.data.get('isAcademyAdmin', false) != true;
       // 본인, 관리자, 또는 같은 학원의 원장(등록 과정 관리 등)만 수정 가능
+      // 관리자가 아니면 role/isAcademyAdmin은 기존 값에서 바꿀 수 없다.
       allow update: if isSignedIn() && (
-        request.auth.uid == userId ||
         isAdmin() ||
-        isDirectorOfAcademy(resource.data.academyId)
+        (
+          (request.auth.uid == userId || isDirectorOfAcademy(resource.data.academyId))
+          && request.resource.data.role == resource.data.role
+          && request.resource.data.get('isAcademyAdmin', false) == resource.data.get('isAcademyAdmin', false)
+        )
       );
       allow delete: if isAdmin();
     }
 
-    // --- academies: 가입 시 코드 검증에 필요, 목록/이름만 읽기 허용 ---
+    // --- academies: 가입 화면(로그인 전)에서 코드 검증에 필요하므로 공개 읽기 ---
+    // 문서에는 학원명/지역/가입코드만 있고, 코드 자체가 배포용 값이라 민감도 낮음
     match /academies/{academyId} {
-      allow read: if isSignedIn();
+      allow read: if true;
       allow write: if isAdmin();
     }
 
@@ -77,9 +86,10 @@ service cloud.firestore {
     }
 
     // --- test_sessions: 진단 세션 로그, 본인/관리자만 접근 ---
+    // userId 필드는 반드시 Firebase auth uid로 저장 (클라이언트도 uid로 통일됨)
     match /test_sessions/{sessionId} {
       allow read: if isSignedIn() && (isAdmin() || resource.data.userId == request.auth.uid);
-      allow create: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       allow update: if isSignedIn() && (isAdmin() || resource.data.userId == request.auth.uid);
       allow delete: if isAdmin();
     }

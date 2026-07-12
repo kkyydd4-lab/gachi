@@ -12,7 +12,8 @@ import DiagnosticResults from './diagnostic/DiagnosticResults';
 
 interface DiagnosticViewProps {
   user: UserAccount | null;
-  onComplete: (result: NonNullable<UserAccount['testResult']>) => void;
+  onSaveResult: (result: NonNullable<UserAccount['testResult']>) => Promise<boolean>; // 결과 계산 즉시 저장
+  onExit: () => void;   // 결과 확인 후 리포트로 이동
   onCancel: () => void;
 }
 
@@ -67,9 +68,10 @@ const GRADE_SUBJECTS: Record<GradeGroupType, string[]> = {
 
 // Gemini AI는 services/gemini.ts를 통해 사용
 
-const DiagnosticView: React.FC<DiagnosticViewProps> = ({ user, onComplete, onCancel }) => {
+const DiagnosticView: React.FC<DiagnosticViewProps> = ({ user, onSaveResult, onExit, onCancel }) => {
   const [loading, setLoading] = useState(true);
   const [agentStatus, setAgentStatus] = useState<AgentStatus>('PLANNING');
+  const [saveStatus, setSaveStatus] = useState<'saving' | 'saved' | 'failed'>('saving');
   const [passages, setPassages] = useState<DiagnosticPassage[]>([]);
   const [currentPassageIdx, setCurrentPassageIdx] = useState(0);
   const [answers, setAnswers] = useState<Record<number, number>>({});
@@ -93,9 +95,16 @@ const DiagnosticView: React.FC<DiagnosticViewProps> = ({ user, onComplete, onCan
   // ========================================
   useEffect(() => {
     if (!user) return;
+    // 세션 소유자 키는 Firebase auth uid로 통일 (Firestore 규칙이 uid 기준으로 검증)
+    // 이전에는 로그인 아이디(user.id)를 써서 규칙과 어긋나고 이력 조회가 깨질 수 있었음
+    const ownerUid = user.uid;
+    if (!ownerUid) {
+      console.warn('[Diagnostic] user.uid 없음 — 세션 로깅을 건너뜁니다.');
+      return;
+    }
 
     const recovered = Analytics.recoverSession();
-    if (recovered && recovered.userId === user.id) {
+    if (recovered && recovered.userId === ownerUid) {
       setSession(recovered);
       const savedAnswers: Record<number, number> = {};
       recovered.questionLogs.forEach(log => {
@@ -107,7 +116,7 @@ const DiagnosticView: React.FC<DiagnosticViewProps> = ({ user, onComplete, onCan
         setAnswers(savedAnswers);
       }
     } else {
-      const newSession = Analytics.startSession(user.id, user.grade, user.school);
+      const newSession = Analytics.startSession(ownerUid, user.grade, user.school);
       setSession(newSession);
     }
   }, [user]);
@@ -213,8 +222,8 @@ const DiagnosticView: React.FC<DiagnosticViewProps> = ({ user, onComplete, onCan
         // 1. Fetch Approved Sessions
         const approvedSessions = await LearningSessionService.getApprovedSessions(userGradeGroup);
 
-        // 2. Fetch Past User Sessions to find used learningSessionIds
-        const pastSessions = await SessionService.getSessionsByUser(user.id);
+        // 2. Fetch Past User Sessions to find used learningSessionIds (uid 기준)
+        const pastSessions = user.uid ? await SessionService.getSessionsByUser(user.uid) : [];
         const usedSessionIds = new Set(pastSessions.map(s => s.learningSessionId).filter(Boolean));
 
         // 3. Load all assets for this grade group
@@ -377,9 +386,11 @@ const DiagnosticView: React.FC<DiagnosticViewProps> = ({ user, onComplete, onCan
       ? Math.round((totalCorrectWeighted / totalCountWeighted) * 100)
       : 0;
 
-    const weakest = [...competencyResults].sort((a, b) => a.score - b.score)[0];
+    // 실제로 출제된(문항 수 > 0) 역량만 취약점 후보 — 미평가 역량(0점)에 처방이 나가는 것 방지
+    const evaluated = competencyResults.filter(c => c.total > 0);
+    const weakest = [...evaluated].sort((a, b) => a.score - b.score)[0];
     let prescription = undefined;
-    if (weakest.score < 80) {
+    if (weakest && weakest.score < 80) {
       prescription = await generatePrescription(weakest.label, user.grade);
     }
 
@@ -450,11 +461,20 @@ const DiagnosticView: React.FC<DiagnosticViewProps> = ({ user, onComplete, onCan
     setFinalResult(resultObj);
     setIsAnalyzing(false);
     setShowResult(true);
+
+    // 결과를 즉시 저장 — 결과 화면에서 새로고침/이탈해도 유실되지 않도록
+    setSaveStatus('saving');
+    onSaveResult(resultObj).then(ok => setSaveStatus(ok ? 'saved' : 'failed'));
+  };
+
+  const handleRetrySave = () => {
+    if (!finalResult) return;
+    setSaveStatus('saving');
+    onSaveResult(finalResult).then(ok => setSaveStatus(ok ? 'saved' : 'failed'));
   };
 
   const handleHomeClick = () => {
-    if (finalResult) onComplete(finalResult);
-    else onCancel();
+    onExit();
   };
 
   // --- RENDER ---
@@ -475,6 +495,8 @@ const DiagnosticView: React.FC<DiagnosticViewProps> = ({ user, onComplete, onCan
         result={finalResult}
         user={user}
         onHome={handleHomeClick}
+        saveStatus={saveStatus}
+        onRetrySave={handleRetrySave}
       />
     );
   }

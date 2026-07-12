@@ -53,26 +53,26 @@ const App: React.FC = () => {
     navigate('/login');
   };
 
-  const handleTestComplete = async (result: NonNullable<UserAccount['testResult']>) => {
-    if (!currentUser) return;
-
-    // 기존 히스토리에 새 결과 추가
-    const existingHistory = currentUser.testHistory || [];
-    const updatedHistory = [...existingHistory, result];
+  // 진단 결과 저장 (결과 계산 직후 즉시 호출 — 이전에는 결과 화면의 "홈으로" 버튼을
+  // 눌러야만 저장되어, 새로고침/이탈 시 결과가 통째로 유실되는 문제가 있었음)
+  const persistTestResult = async (result: NonNullable<UserAccount['testResult']>): Promise<boolean> => {
+    if (!currentUser) return false;
 
     const updatedUser = {
       ...currentUser,
-      testResult: result,           // 최신 결과
-      testHistory: updatedHistory   // 전체 히스토리
+      testResult: result,
+      testHistory: [...(currentUser.testHistory || []), result]
     };
 
-    // Update global state and local storage
-    updateUser(updatedUser);
-
-    // Update "Backend" via Service
-    await AuthService.updateUserResult(updatedUser);
-
-    navigate('/report');
+    try {
+      // 서버 저장을 먼저 확인한 뒤 로컬 상태 갱신 (실패했는데 성공한 것처럼 보이는 상태 방지)
+      await AuthService.updateUserResult(updatedUser);
+      updateUser(updatedUser);
+      return true;
+    } catch (e) {
+      console.error('Test result persist failed:', e);
+      return false;
+    }
   };
 
   if (isLoading) {
@@ -85,7 +85,7 @@ const App: React.FC = () => {
         <Route path="/login" element={!currentUser ? <LoginView onLogin={handleLogin} onGoSignup={() => navigate('/signup')} /> : <Navigate to="/" />} />
         <Route path="/signup" element={!currentUser ? <SignupView onBack={() => navigate('/login')} /> : <Navigate to="/" />} />
 
-        <Route path="/diagnostic" element={currentUser ? <DiagnosticView user={currentUser} onComplete={handleTestComplete} onCancel={() => navigate('/report')} /> : <Navigate to="/login" />} />
+        <Route path="/diagnostic" element={currentUser ? <DiagnosticView user={currentUser} onSaveResult={persistTestResult} onExit={() => navigate('/report')} onCancel={() => navigate('/report')} /> : <Navigate to="/login" />} />
 
         <Route path="/report" element={currentUser ? <ReportView user={currentUser} currentView="REPORT" setView={(view: any) => navigate(view === 'DIAGNOSTIC' ? '/diagnostic' : '/report')} onLogout={handleLogout} onStartTest={() => navigate('/diagnostic')} onOpenWriting={() => navigate('/writing')} onOpenReading={(book) => navigate('/reading', { state: book })} onOpenCareer={() => navigate('/career')} /> : <Navigate to="/login" />} />
 

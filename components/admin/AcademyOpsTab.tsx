@@ -49,7 +49,7 @@ const buildStats = (academies: Academy[], users: UserAccount[], requests: Consul
             ? Math.round(withResult.reduce((sum, s) => sum + (s.testResult?.totalScore || 0), 0) / withResult.length)
             : null;
 
-        const careCount = withResult.filter(s => s.testResult!.competencies.some(c => c.score < 60)).length;
+        const careCount = withResult.filter(s => s.testResult!.competencies.some(c => c.total > 0 && c.score < 60)).length;
         const careRatio = withResult.length > 0 ? Math.round((careCount / withResult.length) * 100) : null;
 
         const retestedCount = students.filter(s => (s.testHistory?.length || 0) >= 2).length;

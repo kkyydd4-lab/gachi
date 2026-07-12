@@ -72,6 +72,16 @@ const SignupView: React.FC<SignupViewProps> = ({ onBack }) => {
           setError('학부모 연락처를 입력해주세요.');
           return;
         }
+        // 학생 학원 코드는 선택 — 입력했다면 유효해야 함
+        if (formData.academyId) {
+          setIsSubmitting(true);
+          const academy = await AcademyService.validateAcademyCode(formData.academyId);
+          setIsSubmitting(false);
+          if (!academy) {
+            setError('학원 코드가 올바르지 않아요. 학원에서 받은 코드를 다시 확인해주세요.');
+            return;
+          }
+        }
       }
 
       setError('');
@@ -92,16 +102,18 @@ const SignupView: React.FC<SignupViewProps> = ({ onBack }) => {
 
     setIsSubmitting(true);
     try {
-      // 선생님일 경우 학원 ID 조회 (코드 -> ID 변환)
+      // 학원 코드 → 실제 학원 ID 변환 (교사는 필수, 학생은 입력한 경우만)
       let finalAcademyId = formData.academyId;
-      if (formData.role === 'TEACHER') {
+      if (formData.academyId) {
         const academy = await AcademyService.validateAcademyCode(formData.academyId);
         if (academy) {
           finalAcademyId = academy.id;
-        } else {
+        } else if (formData.role === 'TEACHER') {
           setError('학원 코드가 유효하지 않습니다.');
           setIsSubmitting(false);
           return;
+        } else {
+          finalAcademyId = ''; // 학생: 잘못된 코드는 미배정으로 (1단계에서 이미 검증되므로 방어적 처리)
         }
       }
 
@@ -264,6 +276,19 @@ const SignupView: React.FC<SignupViewProps> = ({ onBack }) => {
                   placeholder="보호자 전화번호 (- 없이 입력)"
                   type="tel"
                 />
+              </div>
+
+              <div className="flex flex-col">
+                <p className="text-[#111418] text-sm font-bold pb-2">학원 코드 <span className="text-gray-400 font-medium">(선택)</span></p>
+                <input
+                  name="academyId"
+                  value={formData.academyId}
+                  onChange={handleChange}
+                  className="w-full rounded-xl border border-[#dbe0e6] h-14 p-4 text-base focus:ring-2 focus:ring-primary/20 outline-none"
+                  placeholder="예: GACHI_A1B2"
+                  type="text"
+                />
+                <p className="text-xs text-gray-400 mt-1 pl-1">* 다니는 학원에서 받은 코드를 입력하면 선생님과 연결돼요. 없으면 비워두세요.</p>
               </div>
             </>
           ) : (

@@ -33,6 +33,12 @@ export { analytics };
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 
+// Storage (손글씨 사진 업로드 등) — 지연 로드로 초기 번들에서 제외
+export const getStorageInstance = async () => {
+  const { getStorage } = await import('firebase/storage');
+  return getStorage(app);
+};
+
 /**
  * Firebase 연결 상태 확인 헬퍼
  * - Firestore에 간단한 읽기를 시도하여 연결 상태를 확인

@@ -26,7 +26,7 @@ function devApiPlugin(env: Record<string, string>): Plugin {
         try {
           const chunks: Buffer[] = [];
           for await (const chunk of req) chunks.push(chunk as Buffer);
-          const { prompt, options = {} } = JSON.parse(Buffer.concat(chunks).toString('utf-8') || '{}');
+          const { prompt, options = {}, images = [] } = JSON.parse(Buffer.concat(chunks).toString('utf-8') || '{}');
 
           if (!prompt) {
             res.statusCode = 400;
@@ -36,7 +36,7 @@ function devApiPlugin(env: Record<string, string>): Plugin {
 
           const { runGeneration, toCleanErrorMessage } = await import('./api/_lib/generate');
           try {
-            const result = await runGeneration(prompt, options);
+            const result = await runGeneration(prompt, options, images);
             res.setHeader('Content-Type', 'application/json');
             res.end(JSON.stringify(result));
           } catch (error: any) {

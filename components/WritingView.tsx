@@ -1,7 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { UserAccount, Writing, WritingGenre, WRITING_GENRES, WRITING_RUBRIC_CRITERIA, GradeGroupType } from '../types';
 import { WritingService } from '../services/api';
-import { generateWritingReview } from '../services/writingReview';
+import { generateWritingReview, transcribeHandwriting, uploadWritingImages } from '../services/writingReview';
+import { compressImage, CompressedImage } from '../utils/imageCompress';
+
+const MAX_PHOTOS = 5;
 
 // 학생 글쓰기 노트 — 제출 → AI 루브릭 분석 → 교사 확인 결과 열람
 interface WritingViewProps {
@@ -35,6 +38,47 @@ const WritingView: React.FC<WritingViewProps> = ({ user, onBack }) => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [analyzingId, setAnalyzingId] = useState<string | null>(null);
 
+    // 손글씨 사진 입력
+    const [inputMode, setInputMode] = useState<'type' | 'photo'>('type');
+    const [photos, setPhotos] = useState<CompressedImage[]>([]);
+    const [isTranscribing, setIsTranscribing] = useState(false);
+    const [photoError, setPhotoError] = useState('');
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const handlePhotoPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = Array.from(e.target.files || []);
+        e.target.value = ''; // 같은 파일 재선택 허용
+        if (files.length === 0) return;
+        setPhotoError('');
+        if (photos.length + files.length > MAX_PHOTOS) {
+            setPhotoError(`사진은 최대 ${MAX_PHOTOS}장까지 올릴 수 있어요.`);
+            return;
+        }
+        try {
+            const compressed = await Promise.all(files.map(compressImage));
+            setPhotos(prev => [...prev, ...compressed]);
+        } catch (err) {
+            console.error('Image compress failed:', err);
+            setPhotoError('사진을 불러오지 못했어요. 다른 사진으로 시도해주세요.');
+        }
+    };
+
+    const handleTranscribe = async () => {
+        if (photos.length === 0 || isTranscribing) return;
+        setIsTranscribing(true);
+        setPhotoError('');
+        try {
+            const text = await transcribeHandwriting(photos.map(p => ({ data: p.base64, mediaType: p.mediaType })));
+            if (!text) throw new Error('empty');
+            setContent(text);
+        } catch (err) {
+            console.error('Transcription failed:', err);
+            setPhotoError('글자를 읽어오지 못했어요. 사진이 선명한지 확인하고 다시 시도해주세요.');
+        } finally {
+            setIsTranscribing(false);
+        }
+    };
+
     const load = useCallback(async () => {
         if (!user.uid) return;
         setIsLoading(true);
@@ -65,8 +109,21 @@ const WritingView: React.FC<WritingViewProps> = ({ user, onBack }) => {
         if (!user.uid || !title.trim() || content.trim().length < 30 || isSubmitting) return;
         setIsSubmitting(true);
 
+        const writingId = crypto.randomUUID();
+
+        // 손글씨 원본 사진 업로드 (실패해도 텍스트 제출은 진행)
+        let imageUrls: string[] | undefined;
+        if (photos.length > 0) {
+            try {
+                imageUrls = await uploadWritingImages(user.uid, writingId, photos);
+            } catch (err) {
+                console.error('Image upload failed:', err);
+                imageUrls = undefined;
+            }
+        }
+
         const writing: Writing = {
-            id: crypto.randomUUID(),
+            id: writingId,
             studentUid: user.uid,
             studentName: user.name,
             academyId: user.academyId || 'UNASSIGNED',
@@ -76,6 +133,7 @@ const WritingView: React.FC<WritingViewProps> = ({ user, onBack }) => {
             genre,
             submittedAt: new Date().toISOString(),
             status: 'SUBMITTED',
+            ...(imageUrls && imageUrls.length > 0 ? { imageUrls } : {}),
         };
 
         const ok = await WritingService.create(writing);
@@ -87,6 +145,7 @@ const WritingView: React.FC<WritingViewProps> = ({ user, onBack }) => {
 
         setWritings(prev => [writing, ...prev]);
         setTitle(''); setContent(''); setGenre(WRITING_GENRES[0]);
+        setPhotos([]); setInputMode('type'); setPhotoError('');
         setSelected(writing);
         setMode('detail');
         runAnalysis(writing); // 백그라운드 분석 — 실패해도 재시도 버튼으로 복구 가능
@@ -195,13 +254,84 @@ const WritingView: React.FC<WritingViewProps> = ({ user, onBack }) => {
                             />
                         </div>
                         <div>
+                            <label className="block text-sm font-bold text-navy mb-2">글 입력 방법</label>
+                            <div className="flex gap-2 p-1 bg-gray-100 rounded-xl mb-4">
+                                <button
+                                    onClick={() => setInputMode('type')}
+                                    className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-1.5 ${inputMode === 'type' ? 'bg-white text-primary shadow-sm' : 'text-gray-400'}`}
+                                >
+                                    <span className="material-symbols-outlined text-sm">keyboard</span>
+                                    직접 입력
+                                </button>
+                                <button
+                                    onClick={() => setInputMode('photo')}
+                                    className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-1.5 ${inputMode === 'photo' ? 'bg-white text-primary shadow-sm' : 'text-gray-400'}`}
+                                >
+                                    <span className="material-symbols-outlined text-sm">photo_camera</span>
+                                    손글씨 사진 ({photos.length}/{MAX_PHOTOS})
+                                </button>
+                            </div>
+
+                            {inputMode === 'photo' && (
+                                <div className="mb-4 bg-gray-50 rounded-2xl p-5 space-y-4">
+                                    <p className="text-xs text-gray-500 leading-relaxed">
+                                        공책에 쓴 글을 <b className="text-navy">순서대로</b> 찍어 올려주세요 (최대 {MAX_PHOTOS}장).
+                                        AI가 글자를 읽어오면 아래에서 확인하고 고칠 수 있어요.
+                                    </p>
+                                    <input
+                                        ref={fileInputRef}
+                                        type="file"
+                                        accept="image/*"
+                                        multiple
+                                        onChange={handlePhotoPick}
+                                        className="hidden"
+                                    />
+                                    <div className="flex flex-wrap gap-3">
+                                        {photos.map((p, i) => (
+                                            <div key={i} className="relative w-24 h-24">
+                                                <img src={p.dataUrl} alt={`사진 ${i + 1}`} className="w-full h-full object-cover rounded-xl border border-gray-200" />
+                                                <span className="absolute top-1 left-1 bg-navy/80 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">{i + 1}</span>
+                                                <button
+                                                    onClick={() => setPhotos(prev => prev.filter((_, idx) => idx !== i))}
+                                                    className="absolute -top-2 -right-2 w-6 h-6 bg-red-400 text-white rounded-full flex items-center justify-center shadow hover:bg-red-500"
+                                                    aria-label="사진 삭제"
+                                                >
+                                                    <span className="material-symbols-outlined text-sm">close</span>
+                                                </button>
+                                            </div>
+                                        ))}
+                                        {photos.length < MAX_PHOTOS && (
+                                            <button
+                                                onClick={() => fileInputRef.current?.click()}
+                                                className="w-24 h-24 rounded-xl border-2 border-dashed border-gray-300 text-gray-400 hover:border-primary hover:text-primary transition-colors flex flex-col items-center justify-center gap-1"
+                                            >
+                                                <span className="material-symbols-outlined">add_a_photo</span>
+                                                <span className="text-[10px] font-bold">사진 추가</span>
+                                            </button>
+                                        )}
+                                    </div>
+                                    <button
+                                        onClick={handleTranscribe}
+                                        disabled={photos.length === 0 || isTranscribing}
+                                        className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-colors disabled:opacity-40 flex items-center justify-center gap-2"
+                                    >
+                                        {isTranscribing && <span className="material-symbols-outlined animate-spin text-sm">refresh</span>}
+                                        {isTranscribing ? 'AI가 글자를 읽고 있어요...' : content ? '사진에서 다시 읽어오기' : '사진에서 글 읽어오기'}
+                                    </button>
+                                    {photoError && <p className="text-sm text-red-500 font-bold">{photoError}</p>}
+                                </div>
+                            )}
+
                             <label className="block text-sm font-bold text-navy mb-2">
                                 본문 <span className="text-gray-400 font-medium">({content.trim().length}자 · 최소 30자)</span>
+                                {inputMode === 'photo' && content && (
+                                    <span className="ml-2 text-xs text-indigo-500 font-bold">AI가 읽어온 글이에요 — 틀린 글자가 있으면 고쳐주세요!</span>
+                                )}
                             </label>
                             <textarea
                                 value={content}
                                 onChange={e => setContent(e.target.value)}
-                                placeholder="자유롭게 써보세요. 다 쓰면 AI 선생님이 읽고 피드백을 줘요."
+                                placeholder={inputMode === 'photo' ? '사진에서 글을 읽어오면 여기에 나타나요.' : '자유롭게 써보세요. 다 쓰면 AI 선생님이 읽고 피드백을 줘요.'}
                                 className="w-full min-h-[320px] p-4 rounded-xl border border-gray-200 leading-relaxed focus:outline-none focus:ring-2 focus:ring-primary/20"
                             />
                         </div>
@@ -227,6 +357,15 @@ const WritingView: React.FC<WritingViewProps> = ({ user, onBack }) => {
                                 </span>
                             </div>
                             <p className="text-xs text-gray-400 mb-5">{selected.genre} · {new Date(selected.submittedAt).toLocaleString()}</p>
+                            {selected.imageUrls && selected.imageUrls.length > 0 && (
+                                <div className="flex flex-wrap gap-2 mb-5">
+                                    {selected.imageUrls.map((url, i) => (
+                                        <a key={i} href={url} target="_blank" rel="noreferrer" className="block w-20 h-20">
+                                            <img src={url} alt={`손글씨 원본 ${i + 1}`} className="w-full h-full object-cover rounded-xl border border-gray-200 hover:opacity-80 transition-opacity" />
+                                        </a>
+                                    ))}
+                                </div>
+                            )}
                             <p className="text-navy leading-relaxed whitespace-pre-wrap">{selected.content}</p>
                         </div>
 

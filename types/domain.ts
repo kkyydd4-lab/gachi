@@ -115,6 +115,7 @@ export interface Writing {
     genre: WritingGenre;
     submittedAt: string;
     status: WritingStatus;
+    imageUrls?: string[]; // 손글씨 원본 사진 (최대 5장, Firebase Storage URL)
     aiReview?: WritingAiReview;
     teacherComment?: string; // 교사 최종 코멘트 (확인 완료 시)
     confirmedAt?: string;

@@ -25,11 +25,18 @@ export interface GenerationOptions {
     responseSchema?: any;
 }
 
+// 멀티모달 입력 (손글씨 사진 등)
+export interface ImageInput {
+    data: string;      // base64 (data: 접두사 없이)
+    mediaType: string; // 예: image/jpeg
+}
+
 const REQUEST_TIMEOUT_MS = 120_000; // 서버가 폴백/재시도를 다 소진할 시간 여유
 
 export async function generateContent<T = any>(
     prompt: string,
-    options: GenerationOptions = {}
+    options: GenerationOptions = {},
+    images: ImageInput[] = []
 ): Promise<T> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -38,7 +45,7 @@ export async function generateContent<T = any>(
         const response = await fetch('/api/gemini', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt, options }),
+            body: JSON.stringify({ prompt, options, images }),
             signal: controller.signal,
         });
 

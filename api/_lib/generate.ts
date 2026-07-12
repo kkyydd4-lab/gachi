@@ -18,6 +18,12 @@ export interface GenerateRequestOptions {
   responseSchema?: any;
 }
 
+// 멀티모달 입력 (손글씨 사진 판독 등) — base64 데이터 + MIME 타입
+export interface GenerateImageInput {
+  data: string;      // base64 (data: 접두사 없이)
+  mediaType: string; // 예: image/jpeg
+}
+
 export interface GenerateResult {
   data: any;
   model: string;
@@ -80,7 +86,11 @@ function toJsonSchema(schema: any): any {
   return out;
 }
 
-export async function runGeneration(prompt: string, options: GenerateRequestOptions = {}): Promise<GenerateResult> {
+export async function runGeneration(
+  prompt: string,
+  options: GenerateRequestOptions = {},
+  images: GenerateImageInput[] = []
+): Promise<GenerateResult> {
   const providerOptions = {
     gateway: {
       models: FALLBACK_MODELS,
@@ -99,15 +109,33 @@ export async function runGeneration(prompt: string, options: GenerateRequestOpti
   const modelId = options.model || PRIMARY_MODEL;
   const wantsJson = options.responseMimeType === 'application/json' || !!options.responseSchema;
 
+  // 이미지가 있으면 prompt 대신 멀티모달 messages로 전달
+  const hasImages = images.length > 0;
+  const promptInput = hasImages
+    ? {
+        messages: [{
+          role: 'user' as const,
+          content: [
+            { type: 'text' as const, text: prompt },
+            ...images.map(img => ({
+              type: 'image' as const,
+              image: img.data,
+              mediaType: img.mediaType || 'image/jpeg',
+            })),
+          ],
+        }],
+      }
+    : { prompt };
+
   // 1) 스키마가 명시된 경우: generateObject로 구조를 강제
   if (options.responseSchema) {
     try {
       const { object } = await generateObject({
         model: modelId,
-        prompt,
+        ...promptInput,
         schema: jsonSchema(toJsonSchema(options.responseSchema)),
         ...common,
-      });
+      } as any);
       return { data: object, model: modelId };
     } catch (schemaError) {
       // 일부 모델/스키마 조합에서 generateObject가 실패할 수 있으므로 텍스트 경로로 재시도
@@ -116,7 +144,7 @@ export async function runGeneration(prompt: string, options: GenerateRequestOpti
   }
 
   // 2) 텍스트 생성 (JSON 요청이면 파싱 + 잘림 복구)
-  const { text } = await generateText({ model: modelId, prompt, ...common });
+  const { text } = await generateText({ model: modelId, ...promptInput, ...common } as any);
 
   if (wantsJson) {
     const cleaned = text.replace(/```json/g, '').replace(/```/g, '').trim();

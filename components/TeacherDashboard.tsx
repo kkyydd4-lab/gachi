@@ -809,6 +809,18 @@ ${result?.teacherNote ? `- 선생님 관찰 노트: ${result.teacherNote}` : ''}
                                 <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-8">
                                     <h3 className="text-xl font-black text-navy mb-1">{selectedWriting.title}</h3>
                                     <p className="text-xs text-gray-400 mb-5">{selectedWriting.studentName} · {selectedWriting.genre} · {selectedWriting.content.length}자</p>
+                                    {selectedWriting.imageUrls && selectedWriting.imageUrls.length > 0 && (
+                                        <div className="mb-5">
+                                            <p className="text-xs font-bold text-gray-400 mb-2">손글씨 원본 (클릭하면 크게 보기) — 아래 텍스트는 AI 판독본이니 원본과 대조해주세요</p>
+                                            <div className="flex flex-wrap gap-2">
+                                                {selectedWriting.imageUrls.map((url, i) => (
+                                                    <a key={i} href={url} target="_blank" rel="noreferrer" className="block w-24 h-24">
+                                                        <img src={url} alt={`손글씨 원본 ${i + 1}`} className="w-full h-full object-cover rounded-xl border border-gray-200 hover:opacity-80 transition-opacity" />
+                                                    </a>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
                                     <p className="text-navy leading-relaxed whitespace-pre-wrap">{selectedWriting.content}</p>
                                 </div>
 

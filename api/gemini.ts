@@ -10,13 +10,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { prompt, options = {} } = req.body;
+  const { prompt, options = {}, images = [] } = req.body;
   if (!prompt) {
     return res.status(400).json({ error: 'prompt is required' });
   }
+  if (!Array.isArray(images) || images.length > 5) {
+    return res.status(400).json({ error: '이미지는 최대 5장까지 전송할 수 있습니다.' });
+  }
 
   try {
-    const result = await runGeneration(prompt, options);
+    const result = await runGeneration(prompt, options, images);
     return res.status(200).json(result);
   } catch (error: any) {
     console.error('[api/gemini] generation failed:', error?.message);

@@ -15,11 +15,11 @@ export async function transcribeHandwriting(images: ImageInput[]): Promise<strin
 4. 사진에 글이 아닌 부분(공책 줄, 낙서 등)은 무시
 5. 옮겨 적은 본문만 출력 — 설명이나 주석 금지`;
 
-    // 손글씨 판독은 정밀도가 중요하므로 Pro 티어 모델 사용 (기본 Flash보다 필기 인식이 크게 우수).
-    // 게이트웨이 레벨 폴백이 걸려 있어 Pro가 불가하면 자동으로 하위 모델로 내려간다.
+    // 손글씨 판독은 정밀도가 최우선. 필기 인식(HTR) 벤치마크에서 최상위권인 GPT-5 계열 사용.
+    // 게이트웨이 레벨 폴백이 걸려 있어 이 모델이 불가하면 자동으로 하위 모델로 내려간다.
     const text = await generateContent<string>(
         prompt,
-        { temperature: 0.1, maxOutputTokens: 8192, model: 'google/gemini-2.5-pro' },
+        { temperature: 0.1, maxOutputTokens: 8192, model: 'openai/gpt-5.4' },
         images
     );
     return (typeof text === 'string' ? text : String(text)).trim();

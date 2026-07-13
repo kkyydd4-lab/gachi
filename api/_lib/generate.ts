@@ -4,9 +4,11 @@
 import { generateText, generateObject, jsonSchema } from 'ai';
 
 // 게이트웨이 모델 슬러그 (provider/model 형식)
-const PRIMARY_MODEL = 'google/gemini-2.5-flash';
-// 기본 모델 실패/제한 시 게이트웨이가 순서대로 폴백
-const FALLBACK_MODELS = ['google/gemini-2.0-flash', 'anthropic/claude-haiku-4.5'];
+// 가성비 기본: 텍스트/JSON 작업(문항 생성·루브릭·처방·진로·상담·홍보문)은
+// 신형 Flash 티어로. 손글씨 판독만 별도로 비전 강한 모델을 오버라이드해서 씀.
+const PRIMARY_MODEL = 'google/gemini-3.5-flash';
+// 기본 모델 실패/제한 시 게이트웨이가 순서대로 폴백 (모두 비전 지원 → OCR 폴백도 안전)
+const FALLBACK_MODELS = ['google/gemini-2.5-flash', 'anthropic/claude-haiku-4.5'];
 
 export interface GenerateRequestOptions {
   model?: string;

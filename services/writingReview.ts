@@ -15,11 +15,11 @@ export async function transcribeHandwriting(images: ImageInput[]): Promise<strin
 4. 사진에 글이 아닌 부분(공책 줄, 낙서 등)은 무시
 5. 옮겨 적은 본문만 출력 — 설명이나 주석 금지`;
 
-    // 손글씨 판독은 정밀도가 최우선. 필기 인식(HTR) 벤치마크에서 최상위권인 GPT-5 계열 사용.
-    // 게이트웨이 레벨 폴백이 걸려 있어 이 모델이 불가하면 자동으로 하위 모델로 내려간다.
+    // 손글씨 판독: 가성비 최적. GPT-5.6 luna는 GPT-5.6 계열(필기 인식 최상위권)이면서
+    // sol 대비 입력 1/5·출력 1/5 가격이라 OCR에 가장 효율적. 실패 시 게이트웨이 폴백.
     const text = await generateContent<string>(
         prompt,
-        { temperature: 0.1, maxOutputTokens: 8192, model: 'openai/gpt-5.4' },
+        { temperature: 0.1, maxOutputTokens: 8192, model: 'openai/gpt-5.6-luna' },
         images
     );
     return (typeof text === 'string' ? text : String(text)).trim();

@@ -23,6 +23,7 @@ export interface GenerationOptions {
     maxOutputTokens?: number;
     responseMimeType?: string;
     responseSchema?: any;
+    fallbackModels?: string[]; // 이 요청에 한해 게이트웨이 폴백 모델 지정
 }
 
 // 멀티모달 입력 (손글씨 사진 등)
@@ -32,6 +33,47 @@ export interface ImageInput {
 }
 
 const REQUEST_TIMEOUT_MS = 120_000; // 서버가 폴백/재시도를 다 소진할 시간 여유
+
+// 데이터 + 진단 메타(요청/실제 응답 모델)를 함께 반환
+export async function generateContentDetailed<T = any>(
+    prompt: string,
+    options: GenerationOptions = {},
+    images: ImageInput[] = []
+): Promise<{ data: T; model?: string; servedModel?: string }> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+    try {
+        const response = await fetch('/api/gemini', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt, options, images }),
+            signal: controller.signal,
+        });
+
+        if (!response.ok) {
+            let message = `AI 생성 요청이 실패했습니다. (${response.status})`;
+            try {
+                const body = await response.json();
+                if (body?.error) message = body.error;
+            } catch { /* 응답 본문이 JSON이 아니면 기본 메시지 유지 */ }
+            throw new Error(message);
+        }
+
+        const result = await response.json();
+        if (result.repaired) {
+            console.warn('⚠️ Server repaired truncated JSON response');
+        }
+        return { data: result.data as T, model: result.model, servedModel: result.servedModel };
+    } catch (error: any) {
+        if (error?.name === 'AbortError') {
+            throw new Error('AI 생성 요청이 시간 초과되었습니다. 잠시 후 다시 시도해주세요.');
+        }
+        throw error;
+    } finally {
+        clearTimeout(timeout);
+    }
+}
 
 export async function generateContent<T = any>(
     prompt: string,

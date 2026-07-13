@@ -1,13 +1,24 @@
 // 학생 글 AI 루브릭 분석 — 제출 직후 자동 실행, 실패 시 화면에서 재시도 가능
-import { generateContent, Type, ImageInput } from './gemini';
+import { generateContent, generateContentDetailed, Type, ImageInput } from './gemini';
 import { Writing, WritingAiReview, WRITING_RUBRIC_CRITERIA } from '../types';
 import { getStorageInstance } from './firebase';
 import type { CompressedImage } from '../utils/imageCompress';
 
+// 손글씨 판독 모델 — 검증된, 강한 한국어 비전 모델로 지정.
+// (이전의 openai/gpt-5.6-luna 슬러그는 실재 여부가 불확실했고, 무효 시 게이트웨이가 약한
+//  폴백 모델로 조용히 내려가 판독이 크게 나빠지는 문제가 있었음. 폴백도 강한 비전 모델로 고정.)
+const OCR_MODEL = 'google/gemini-3.1-pro-preview';
+const OCR_FALLBACKS = ['anthropic/claude-opus-4.8', 'openai/gpt-5.4', 'google/gemini-2.5-flash'];
+
+export interface TranscriptionResult {
+    text: string;
+    servedModel?: string; // 실제로 응답한 모델 (폴백 진단용)
+}
+
 // 손글씨 사진 → 텍스트 판독 (학생이 확인·수정 후 제출하는 초안)
 // 여러 장을 한 번에 넣으면 모델이 페이지별 집중을 못 해 일부만 읽는 문제가 있어,
 // 페이지당 1장씩 개별 판독한 뒤 순서대로 이어붙인다. (해상도도 페이지당이라 높게 유지 가능)
-export async function transcribeHandwriting(images: ImageInput[]): Promise<string> {
+export async function transcribeHandwriting(images: ImageInput[]): Promise<TranscriptionResult> {
     const buildPrompt = (pageNo: number, total: number) =>
         `이 사진은 학생이 손으로 쓴 글의 ${total > 1 ? `${total}장 중 ${pageNo}번째 장` : '한 장'}입니다. 사진 속 손글씨를 한 글자도 빠짐없이 정확하게 옮겨 적어주세요.
 
@@ -19,20 +30,20 @@ export async function transcribeHandwriting(images: ImageInput[]): Promise<strin
 5. 사진에 글이 아닌 부분(공책 줄, 낙서, 그림)은 무시
 6. 이 사진에 보이는 본문만 출력 — 설명·주석·페이지 번호 붙이지 말 것`;
 
-    // 손글씨 판독: 가성비 최적. GPT-5.6 luna는 GPT-5.6 계열(필기 인식 최상위권)이면서
-    // sol 대비 저렴. 페이지별 개별 호출이라 각 장을 고해상도로 보낼 수 있음. 실패 시 게이트웨이 폴백.
     const pages = await Promise.all(images.map((img, i) =>
-        generateContent<string>(
+        generateContentDetailed<string>(
             buildPrompt(i + 1, images.length),
-            { temperature: 0.1, maxOutputTokens: 8192, model: 'openai/gpt-5.6-luna' },
+            { temperature: 0.1, maxOutputTokens: 8192, model: OCR_MODEL, fallbackModels: OCR_FALLBACKS },
             [img]
         )
     ));
 
-    return pages
-        .map(p => (typeof p === 'string' ? p : String(p)).trim())
+    const text = pages
+        .map(p => (typeof p.data === 'string' ? p.data : String(p.data)).trim())
         .filter(Boolean)
         .join('\n\n');
+
+    return { text, servedModel: pages[0]?.servedModel };
 }
 
 // 원본 사진을 Firebase Storage에 업로드하고 다운로드 URL 목록 반환

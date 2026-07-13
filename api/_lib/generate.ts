@@ -18,6 +18,7 @@ export interface GenerateRequestOptions {
   maxOutputTokens?: number;
   responseMimeType?: string;
   responseSchema?: any;
+  fallbackModels?: string[]; // 이 요청에 한해 게이트웨이 폴백 모델을 지정 (예: OCR은 강한 비전 모델로)
 }
 
 // 멀티모달 입력 (손글씨 사진 판독 등) — base64 데이터 + MIME 타입
@@ -28,7 +29,8 @@ export interface GenerateImageInput {
 
 export interface GenerateResult {
   data: any;
-  model: string;
+  model: string;       // 요청한 모델
+  servedModel?: string; // 게이트웨이가 실제로 응답한 모델 (폴백 발생 시 다를 수 있음 — 진단용)
   repaired?: boolean;
 }
 
@@ -95,7 +97,7 @@ export async function runGeneration(
 ): Promise<GenerateResult> {
   const providerOptions = {
     gateway: {
-      models: FALLBACK_MODELS,
+      models: options.fallbackModels ?? FALLBACK_MODELS,
       tags: ['app:gachi-literacy'],
     },
   } as any;
@@ -146,21 +148,24 @@ export async function runGeneration(
   }
 
   // 2) 텍스트 생성 (JSON 요청이면 파싱 + 잘림 복구)
-  const { text } = await generateText({ model: modelId, ...promptInput, ...common } as any);
+  const result = await generateText({ model: modelId, ...promptInput, ...common } as any);
+  const text = result.text;
+  // 게이트웨이가 실제로 사용한 모델 (폴백 시 요청 모델과 다름)
+  const servedModel = (result as any)?.response?.modelId as string | undefined;
 
   if (wantsJson) {
     const cleaned = text.replace(/```json/g, '').replace(/```/g, '').trim();
     try {
-      return { data: JSON.parse(cleaned), model: modelId };
+      return { data: JSON.parse(cleaned), model: modelId, servedModel };
     } catch {
       const repaired = repairTruncatedJson(text);
       try {
-        return { data: JSON.parse(repaired), model: modelId, repaired: true };
+        return { data: JSON.parse(repaired), model: modelId, servedModel, repaired: true };
       } catch {
         throw new Error('AI returned malformed JSON.');
       }
     }
   }
 
-  return { data: text, model: modelId };
+  return { data: text, model: modelId, servedModel };
 }

@@ -43,6 +43,7 @@ const WritingView: React.FC<WritingViewProps> = ({ user, onBack }) => {
     const [photos, setPhotos] = useState<CompressedImage[]>([]);
     const [isTranscribing, setIsTranscribing] = useState(false);
     const [photoError, setPhotoError] = useState('');
+    const [ocrModel, setOcrModel] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handlePhotoPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -79,9 +80,10 @@ const WritingView: React.FC<WritingViewProps> = ({ user, onBack }) => {
         setIsTranscribing(true);
         setPhotoError('');
         try {
-            const text = await transcribeHandwriting(photos.map(p => ({ data: p.base64, mediaType: p.mediaType })));
+            const { text, servedModel } = await transcribeHandwriting(photos.map(p => ({ data: p.base64, mediaType: p.mediaType })));
             if (!text) throw new Error('empty');
             setContent(text);
+            if (servedModel) setOcrModel(servedModel); // 실제 판독한 모델 표시 (진단용)
         } catch (err) {
             console.error('Transcription failed:', err);
             setPhotoError('글자를 읽어오지 못했어요. 사진이 선명한지 확인하고 다시 시도해주세요.');
@@ -351,6 +353,9 @@ const WritingView: React.FC<WritingViewProps> = ({ user, onBack }) => {
                                         {isTranscribing ? 'AI가 글자를 읽고 있어요...' : content ? '사진에서 다시 읽어오기' : '사진에서 글 읽어오기'}
                                     </button>
                                     {photoError && <p className="text-sm text-red-500 font-bold">{photoError}</p>}
+                                    {ocrModel && !photoError && (
+                                        <p className="text-[10px] text-gray-400 text-center">판독 모델: {ocrModel}</p>
+                                    )}
                                 </div>
                             )}
 

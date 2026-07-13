@@ -63,6 +63,17 @@ const WritingView: React.FC<WritingViewProps> = ({ user, onBack }) => {
         }
     };
 
+    // 사진 순서 변경 (판독은 사진 순서대로 이어붙이므로 순서가 중요)
+    const movePhoto = (from: number, to: number) => {
+        if (to < 0 || to >= photos.length) return;
+        setPhotos(prev => {
+            const next = [...prev];
+            const [moved] = next.splice(from, 1);
+            next.splice(to, 0, moved);
+            return next;
+        });
+    };
+
     const handleTranscribe = async () => {
         if (photos.length === 0 || isTranscribing) return;
         setIsTranscribing(true);
@@ -276,7 +287,7 @@ const WritingView: React.FC<WritingViewProps> = ({ user, onBack }) => {
                                 <div className="mb-4 bg-gray-50 rounded-2xl p-5 space-y-4">
                                     <p className="text-xs text-gray-500 leading-relaxed">
                                         공책에 쓴 글을 <b className="text-navy">순서대로</b> 찍어 올려주세요 (최대 {MAX_PHOTOS}장).
-                                        AI가 글자를 읽어오면 아래에서 확인하고 고칠 수 있어요.
+                                        순서가 뒤바뀌면 <b className="text-navy">화살표로 바꿀 수 있어요.</b> AI가 글자를 읽어오면 아래에서 확인하고 고칠 수 있어요.
                                     </p>
                                     <input
                                         ref={fileInputRef}
@@ -288,16 +299,37 @@ const WritingView: React.FC<WritingViewProps> = ({ user, onBack }) => {
                                     />
                                     <div className="flex flex-wrap gap-3">
                                         {photos.map((p, i) => (
-                                            <div key={i} className="relative w-24 h-24">
-                                                <img src={p.dataUrl} alt={`사진 ${i + 1}`} className="w-full h-full object-cover rounded-xl border border-gray-200" />
-                                                <span className="absolute top-1 left-1 bg-navy/80 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">{i + 1}</span>
-                                                <button
-                                                    onClick={() => setPhotos(prev => prev.filter((_, idx) => idx !== i))}
-                                                    className="absolute -top-2 -right-2 w-6 h-6 bg-red-400 text-white rounded-full flex items-center justify-center shadow hover:bg-red-500"
-                                                    aria-label="사진 삭제"
-                                                >
-                                                    <span className="material-symbols-outlined text-sm">close</span>
-                                                </button>
+                                            <div key={i} className="relative w-24 h-28">
+                                                <div className="relative w-24 h-24">
+                                                    <img src={p.dataUrl} alt={`사진 ${i + 1}`} className="w-full h-full object-cover rounded-xl border border-gray-200" />
+                                                    <span className="absolute top-1 left-1 bg-navy/80 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">{i + 1}</span>
+                                                    <button
+                                                        onClick={() => setPhotos(prev => prev.filter((_, idx) => idx !== i))}
+                                                        className="absolute -top-2 -right-2 w-6 h-6 bg-red-400 text-white rounded-full flex items-center justify-center shadow hover:bg-red-500"
+                                                        aria-label="사진 삭제"
+                                                    >
+                                                        <span className="material-symbols-outlined text-sm">close</span>
+                                                    </button>
+                                                </div>
+                                                {/* 순서 변경 화살표 */}
+                                                <div className="flex justify-center gap-1 mt-1">
+                                                    <button
+                                                        onClick={() => movePhoto(i, i - 1)}
+                                                        disabled={i === 0}
+                                                        className="w-8 h-6 rounded-md bg-white border border-gray-200 text-gray-500 flex items-center justify-center hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed"
+                                                        aria-label="앞으로"
+                                                    >
+                                                        <span className="material-symbols-outlined text-sm">chevron_left</span>
+                                                    </button>
+                                                    <button
+                                                        onClick={() => movePhoto(i, i + 1)}
+                                                        disabled={i === photos.length - 1}
+                                                        className="w-8 h-6 rounded-md bg-white border border-gray-200 text-gray-500 flex items-center justify-center hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed"
+                                                        aria-label="뒤로"
+                                                    >
+                                                        <span className="material-symbols-outlined text-sm">chevron_right</span>
+                                                    </button>
+                                                </div>
                                             </div>
                                         ))}
                                         {photos.length < MAX_PHOTOS && (

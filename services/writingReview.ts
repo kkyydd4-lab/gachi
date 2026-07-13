@@ -5,24 +5,34 @@ import { getStorageInstance } from './firebase';
 import type { CompressedImage } from '../utils/imageCompress';
 
 // 손글씨 사진 → 텍스트 판독 (학생이 확인·수정 후 제출하는 초안)
+// 여러 장을 한 번에 넣으면 모델이 페이지별 집중을 못 해 일부만 읽는 문제가 있어,
+// 페이지당 1장씩 개별 판독한 뒤 순서대로 이어붙인다. (해상도도 페이지당이라 높게 유지 가능)
 export async function transcribeHandwriting(images: ImageInput[]): Promise<string> {
-    const prompt = `다음 사진들은 학생이 손으로 쓴 글입니다. 사진 순서대로 이어지는 하나의 글로 정확하게 옮겨 적어주세요.
+    const buildPrompt = (pageNo: number, total: number) =>
+        `이 사진은 학생이 손으로 쓴 글의 ${total > 1 ? `${total}장 중 ${pageNo}번째 장` : '한 장'}입니다. 사진 속 손글씨를 한 글자도 빠짐없이 정확하게 옮겨 적어주세요.
 
 [규칙]
 1. 맞춤법·띄어쓰기를 교정하지 말고 학생이 쓴 그대로 옮길 것 (평가를 위해 원문 보존이 중요합니다)
-2. 문단 구분이 보이면 줄바꿈으로 반영
-3. 글자가 흐릿해 확신이 없는 부분은 가장 가능성 높은 글자로 적기
-4. 사진에 글이 아닌 부분(공책 줄, 낙서 등)은 무시
-5. 옮겨 적은 본문만 출력 — 설명이나 주석 금지`;
+2. 연필로 흐리게 쓴 글씨, 공책 줄 위의 작은 글씨도 최대한 읽어낼 것
+3. 문단·줄 구분이 보이면 줄바꿈으로 반영
+4. 정말 판독이 불가능한 글자만 □로 표시하고, 그 외에는 가장 가능성 높은 글자로 적기
+5. 사진에 글이 아닌 부분(공책 줄, 낙서, 그림)은 무시
+6. 이 사진에 보이는 본문만 출력 — 설명·주석·페이지 번호 붙이지 말 것`;
 
     // 손글씨 판독: 가성비 최적. GPT-5.6 luna는 GPT-5.6 계열(필기 인식 최상위권)이면서
-    // sol 대비 입력 1/5·출력 1/5 가격이라 OCR에 가장 효율적. 실패 시 게이트웨이 폴백.
-    const text = await generateContent<string>(
-        prompt,
-        { temperature: 0.1, maxOutputTokens: 8192, model: 'openai/gpt-5.6-luna' },
-        images
-    );
-    return (typeof text === 'string' ? text : String(text)).trim();
+    // sol 대비 저렴. 페이지별 개별 호출이라 각 장을 고해상도로 보낼 수 있음. 실패 시 게이트웨이 폴백.
+    const pages = await Promise.all(images.map((img, i) =>
+        generateContent<string>(
+            buildPrompt(i + 1, images.length),
+            { temperature: 0.1, maxOutputTokens: 8192, model: 'openai/gpt-5.6-luna' },
+            [img]
+        )
+    ));
+
+    return pages
+        .map(p => (typeof p === 'string' ? p : String(p)).trim())
+        .filter(Boolean)
+        .join('\n\n');
 }
 
 // 원본 사진을 Firebase Storage에 업로드하고 다운로드 URL 목록 반환

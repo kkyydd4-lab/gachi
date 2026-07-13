@@ -8,8 +8,10 @@ export interface CompressedImage {
     mediaType: string;
 }
 
-const MAX_DIMENSION = 1280; // 손글씨 판독에 충분한 해상도
-const JPEG_QUALITY = 0.7;
+// 손글씨(특히 연필) 판독은 해상도가 곧 정확도. 1280px에선 글자가 뭉개져 판독이 크게 떨어졌음.
+// 페이지당 1장씩 개별 전송하므로 2000px로 올려도 요청 본문 한도에 여유가 있음.
+const MAX_DIMENSION = 2000;
+const JPEG_QUALITY = 0.85;
 
 export async function compressImage(file: File): Promise<CompressedImage> {
     const bitmap = await createImageBitmap(file);

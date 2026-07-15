@@ -131,13 +131,21 @@ const WritingView: React.FC<WritingViewProps> = ({ user, onBack }) => {
         const writingId = crypto.randomUUID();
 
         // 손글씨 원본 사진 업로드 (실패해도 텍스트 제출은 진행)
+        // Firebase Storage 미설정 시 SDK가 CORS 실패를 즉시 던지지 않고 재시도하며 오래 멈추므로,
+        // 타임아웃을 걸어 업로드가 지연되면 사진 없이 제출을 계속한다.
         let imageUrls: string[] | undefined;
         if (photos.length > 0) {
             try {
-                imageUrls = await uploadWritingImages(user.uid, writingId, photos);
+                const timeout = new Promise<never>((_, reject) =>
+                    setTimeout(() => reject(new Error('upload-timeout')), 20000));
+                imageUrls = await Promise.race([
+                    uploadWritingImages(user.uid, writingId, photos),
+                    timeout,
+                ]);
             } catch (err) {
-                console.error('Image upload failed:', err);
+                console.error('Image upload failed or timed out:', err);
                 imageUrls = undefined;
+                setPhotoError('원본 사진 저장은 실패했지만, 글과 AI 분석은 정상 제출됐어요.');
             }
         }
 

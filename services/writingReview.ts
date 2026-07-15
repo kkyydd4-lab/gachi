@@ -42,9 +42,13 @@ async function transcribeOnePage(prompt: string, img: ImageInput): Promise<{ tex
 }
 
 // 손글씨 사진 → 텍스트 판독 (학생이 확인·수정 후 제출하는 초안)
-// 병렬로 쏘면 프리미엄 모델 요청 제한을 즉시 초과하므로, 페이지를 "순차"로 판독한다.
-// (여러 장을 한 번에 넣으면 페이지별 집중도 떨어져 일부만 읽는 문제도 있었음)
-export async function transcribeHandwriting(images: ImageInput[]): Promise<TranscriptionResult> {
+// 페이지를 병렬로 판독한다(유료 크레딧이면 rate-limit 여유가 커 5장도 ~20~30초).
+// 각 페이지는 개별 요청이라 순서·집중도 유지되고, 실패 시 페이지별 모델 강등이 걸린다.
+// onProgress로 "n/total" 진행을 알려 대기 UX를 개선한다.
+export async function transcribeHandwriting(
+    images: ImageInput[],
+    onProgress?: (done: number, total: number) => void
+): Promise<TranscriptionResult> {
     const buildPrompt = (pageNo: number, total: number) =>
         `이 사진은 학생이 손으로 쓴 글의 ${total > 1 ? `${total}장 중 ${pageNo}번째 장` : '한 장'}입니다. 사진 속 손글씨를 한 글자도 빠짐없이 정확하게 옮겨 적어주세요.
 
@@ -56,16 +60,21 @@ export async function transcribeHandwriting(images: ImageInput[]): Promise<Trans
 5. 사진에 글이 아닌 부분(공책 줄, 낙서, 그림)은 무시
 6. 이 사진에 보이는 본문만 출력 — 설명·주석·페이지 번호 붙이지 말 것`;
 
-    const results: string[] = [];
-    let servedModel: string | undefined;
-    for (let i = 0; i < images.length; i++) {
-        const r = await transcribeOnePage(buildPrompt(i + 1, images.length), images[i]);
-        results.push(r.text);
-        if (!servedModel) servedModel = r.servedModel;
-        if (i < images.length - 1) await sleep(400); // 요청 간 간격으로 rate-limit 완화
-    }
+    const total = images.length;
+    let done = 0;
+    onProgress?.(0, total);
 
-    return { text: results.filter(Boolean).join('\n\n'), servedModel };
+    const pages = await Promise.all(images.map(async (img, i) => {
+        const r = await transcribeOnePage(buildPrompt(i + 1, total), img);
+        done += 1;
+        onProgress?.(done, total);
+        return r;
+    }));
+
+    return {
+        text: pages.map(p => p.text).filter(Boolean).join('\n\n'),
+        servedModel: pages[0]?.servedModel,
+    };
 }
 
 // 원본 사진을 Firebase Storage에 업로드하고 다운로드 URL 목록 반환

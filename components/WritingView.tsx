@@ -44,6 +44,7 @@ const WritingView: React.FC<WritingViewProps> = ({ user, onBack }) => {
     const [isTranscribing, setIsTranscribing] = useState(false);
     const [photoError, setPhotoError] = useState('');
     const [ocrModel, setOcrModel] = useState<string | null>(null);
+    const [transcribeProgress, setTranscribeProgress] = useState<{ done: number; total: number } | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handlePhotoPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -79,8 +80,12 @@ const WritingView: React.FC<WritingViewProps> = ({ user, onBack }) => {
         if (photos.length === 0 || isTranscribing) return;
         setIsTranscribing(true);
         setPhotoError('');
+        setTranscribeProgress({ done: 0, total: photos.length });
         try {
-            const { text, servedModel } = await transcribeHandwriting(photos.map(p => ({ data: p.base64, mediaType: p.mediaType })));
+            const { text, servedModel } = await transcribeHandwriting(
+                photos.map(p => ({ data: p.base64, mediaType: p.mediaType })),
+                (done, total) => setTranscribeProgress({ done, total })
+            );
             if (!text) throw new Error('empty');
             setContent(text);
             if (servedModel) setOcrModel(servedModel); // 실제 판독한 모델 표시 (진단용)
@@ -89,6 +94,7 @@ const WritingView: React.FC<WritingViewProps> = ({ user, onBack }) => {
             setPhotoError('글자를 읽어오지 못했어요. 사진이 선명한지 확인하고 다시 시도해주세요.');
         } finally {
             setIsTranscribing(false);
+            setTranscribeProgress(null);
         }
     };
 
@@ -350,7 +356,11 @@ const WritingView: React.FC<WritingViewProps> = ({ user, onBack }) => {
                                         className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-colors disabled:opacity-40 flex items-center justify-center gap-2"
                                     >
                                         {isTranscribing && <span className="material-symbols-outlined animate-spin text-sm">refresh</span>}
-                                        {isTranscribing ? 'AI가 글자를 읽고 있어요...' : content ? '사진에서 다시 읽어오기' : '사진에서 글 읽어오기'}
+                                        {isTranscribing
+                                            ? (transcribeProgress && transcribeProgress.total > 1
+                                                ? `AI가 글자를 읽고 있어요... (${transcribeProgress.done}/${transcribeProgress.total}장)`
+                                                : 'AI가 글자를 읽고 있어요...')
+                                            : content ? '사진에서 다시 읽어오기' : '사진에서 글 읽어오기'}
                                     </button>
                                     {photoError && <p className="text-sm text-red-500 font-bold">{photoError}</p>}
                                     {ocrModel && !photoError && (

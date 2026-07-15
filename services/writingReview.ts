@@ -7,10 +7,12 @@ import type { CompressedImage } from '../utils/imageCompress';
 // 손글씨 판독 모델 우선순위. 앞쪽일수록 품질↑(단, 프리미엄/프리뷰 모델은 무료 티어에서
 // 요청 제한이 강함). 앞 모델이 rate-limit 등으로 실패하면 순서대로 다음 모델로 강등.
 // gemini-2.5-flash는 GA라 무료 티어에서도 비교적 여유가 있어 최후 보루로 둔다.
+// 실제 학생 손글씨 비교 결과 pro가 흘림 구간 판독 정확도에서 뚜렷이 우위(문해력 평가는
+// 원문 정확도가 신뢰와 직결). 속도는 병렬 처리 + 진행 표시로 완화. flash를 폴백으로 둠.
 const OCR_MODEL_CHAIN = [
-    'google/gemini-3.1-pro-preview', // 최상 품질 (유료 크레딧 권장)
-    'openai/gpt-5.4',
-    'google/gemini-2.5-flash',       // 무료 티어 최후 보루
+    'google/gemini-3.1-pro-preview', // 최상 정확도 (기본)
+    'google/gemini-3.5-flash',       // 실패 시 빠른 모델로
+    'google/gemini-2.5-flash',       // 최후 보루
 ];
 
 export interface TranscriptionResult {

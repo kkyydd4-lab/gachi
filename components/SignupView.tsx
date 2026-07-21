@@ -23,6 +23,8 @@ const SignupView: React.FC<SignupViewProps> = ({ onBack }) => {
   });
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [agreed, setAgreed] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setFormData({
@@ -100,6 +102,11 @@ const SignupView: React.FC<SignupViewProps> = ({ onBack }) => {
       return;
     }
 
+    if (!agreed) {
+      setError('개인정보 수집·이용 및 AI 처리에 동의해주세요.');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       // 학원 코드 → 실제 학원 ID 변환 (교사는 필수, 학생은 입력한 경우만)
@@ -121,7 +128,8 @@ const SignupView: React.FC<SignupViewProps> = ({ onBack }) => {
         ...formData,
         academyId: finalAcademyId, // 실제 ID로 저장
         role: formData.role as 'STUDENT' | 'TEACHER' | 'ADMIN', // 타입 단언
-        signupDate: new Date().toISOString()
+        signupDate: new Date().toISOString(),
+        consentAgreedAt: new Date().toISOString(), // 개인정보·AI 처리 동의 시각 기록
       };
 
       const success = await AuthService.signup(newUser);
@@ -342,13 +350,78 @@ const SignupView: React.FC<SignupViewProps> = ({ onBack }) => {
               type="password"
             />
           </div>
+
+          {/* 개인정보·AI 처리 동의 (미성년자 대상 서비스 법적 요건) */}
+          <div className="mt-2 rounded-xl border border-gray-200 p-4">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={agreed}
+                onChange={e => setAgreed(e.target.checked)}
+                className="mt-0.5 w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary/30 shrink-0"
+              />
+              <span className="text-sm text-[#111418] leading-relaxed">
+                <b>[필수]</b> 개인정보 수집·이용 및 AI 처리에 동의합니다.
+                <button type="button" onClick={() => setShowTerms(true)} className="text-primary font-bold underline ml-1">
+                  전문 보기
+                </button>
+              </span>
+            </label>
+            <p className="text-xs text-gray-400 mt-2 pl-8 leading-relaxed">
+              학생의 이름·학교·연락처와 제출한 글·독서 기록·손글씨 사진이 문해력 평가와 학습 리포트 생성을 위해
+              수집되고 AI로 분석됩니다. 미성년자의 경우 보호자 동의가 필요합니다.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* 개인정보 처리방침 전문 모달 */}
+      {showTerms && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[80] flex items-center justify-center p-4" onClick={() => setShowTerms(false)}>
+          <div className="bg-white rounded-3xl w-full max-w-lg max-h-[80vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="p-5 border-b border-gray-100 flex justify-between items-center">
+              <h3 className="font-black text-navy">개인정보 수집·이용 및 AI 처리 안내</h3>
+              <button onClick={() => setShowTerms(false)}><span className="material-symbols-outlined text-gray-400">close</span></button>
+            </div>
+            <div className="p-6 overflow-y-auto text-sm text-gray-600 leading-relaxed space-y-4">
+              <div>
+                <p className="font-bold text-navy mb-1">1. 수집 항목</p>
+                <p>이름, 학교, 학년, 학생·보호자 연락처, 소속 학원, 문해력 진단 응답·결과, 제출한 글과 손글씨 사진, 독서 기록.</p>
+              </div>
+              <div>
+                <p className="font-bold text-navy mb-1">2. 이용 목적</p>
+                <p>문해력 진단·평가, 글쓰기 첨삭, 성장 리포트 및 진로 탐색 리포트 생성, 학원의 학습 지도·상담.</p>
+              </div>
+              <div>
+                <p className="font-bold text-navy mb-1">3. AI 처리</p>
+                <p>제출한 글·손글씨 사진·진단 결과는 AI 모델을 통해 분석·요약됩니다. 처리 결과는 학생·보호자·담당 선생님에게 제공됩니다.</p>
+              </div>
+              <div>
+                <p className="font-bold text-navy mb-1">4. 보유 기간 및 열람·삭제</p>
+                <p>회원 탈퇴 또는 삭제 요청 시 관련 데이터를 파기합니다. 보호자는 자녀의 데이터 열람·정정·삭제를 요청할 수 있습니다.</p>
+              </div>
+              <div>
+                <p className="font-bold text-navy mb-1">5. 미성년자 보호</p>
+                <p>본 서비스는 미성년자를 대상으로 하며, 만 14세 미만은 보호자의 동의 하에 가입·이용해야 합니다.</p>
+              </div>
+              <p className="text-xs text-gray-400">※ 본 안내는 요약본입니다. 정식 개인정보 처리방침 전문은 학원을 통해 제공됩니다.</p>
+            </div>
+            <div className="p-5 border-t border-gray-100">
+              <button
+                onClick={() => { setAgreed(true); setShowTerms(false); }}
+                className="w-full bg-primary text-white font-bold py-3 rounded-xl"
+              >
+                동의하고 닫기
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-100 max-w-md mx-auto">
         <button
           onClick={step === 1 ? handleNext : handleSignup}
-          disabled={isSubmitting}
+          disabled={isSubmitting || (step === 2 && !agreed)}
           className="w-full bg-primary text-white font-bold py-4 rounded-xl text-lg shadow-lg shadow-primary/20 disabled:bg-gray-300 flex items-center justify-center gap-2"
         >
           {isSubmitting && <span className="material-symbols-outlined animate-spin text-sm">refresh</span>}

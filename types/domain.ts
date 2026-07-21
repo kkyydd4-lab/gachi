@@ -200,6 +200,7 @@ export interface UserAccount {
     parentPhone?: string; // 학부모 연락처
     program?: ProgramEnrollment; // 등록된 연간 성장 프로그램 (학생)
     careerReport?: CareerReport; // 최신 진로·적성 리포트
+    consentAgreedAt?: string; // 개인정보 수집·이용 및 AI 처리 동의 시각
 }
 
 export interface Question {

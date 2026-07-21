@@ -53,66 +53,11 @@ export const AuthService = {
     try {
       const normalizedId = id.trim().toLowerCase();
 
-      // 관리자 계정 체크 (환경변수 기반 — 추후 Firebase Custom Claims로 전환 예정)
-      const adminId = import.meta.env.VITE_ADMIN_ID;
-      const adminPw = import.meta.env.VITE_ADMIN_PW;
-
-      if (adminId && adminPw && normalizedId === adminId && password.trim() === adminPw) {
-        // Firebase Auth 세션도 생성 (Firestore 접근 권한 필요)
-        const adminEmail = toEmail(adminId);
-        // Firebase Auth는 6자 이상 비밀번호 필요
-        const authPassword = adminPw.length >= 6 ? adminPw : adminPw + '!@#$%^';
-
-        let authSuccess = false;
-        try {
-          await signInWithEmailAndPassword(auth, adminEmail, authPassword);
-          authSuccess = true;
-          console.log('[Admin] Firebase Auth 로그인 성공');
-        } catch (signInError: any) {
-          console.log('[Admin] 로그인 실패, 계정 생성 시도:', signInError.code);
-          try {
-            await createUserWithEmailAndPassword(auth, adminEmail, authPassword);
-            authSuccess = true;
-            console.log('[Admin] Firebase Auth 계정 생성 성공');
-          } catch (createError: any) {
-            console.error('[Admin] 계정 생성도 실패:', createError.code, createError.message);
-          }
-        }
-
-        console.log('[Admin] Auth 상태:', authSuccess, 'currentUser:', !!auth.currentUser);
-
-        const adminUser: UserAccount = {
-          id: adminId,
-          password: '',
-          name: '관리자',
-          role: 'ADMIN',
-          academyId: 'ADMIN',
-          school: '관리 본부',
-          grade: '-',
-          phone: '010-0000-0000',
-          signupDate: new Date().toISOString(),
-          isAdmin: true
-        } as UserAccount;
-
-        // Firestore에 admin 프로필도 저장 (uid 기반)
-        if (auth.currentUser) {
-          try {
-            const adminDoc = await getDoc(doc(db, USERS_COLLECTION, auth.currentUser.uid));
-            if (!adminDoc.exists()) {
-              await setDoc(doc(db, USERS_COLLECTION, auth.currentUser.uid), {
-                ...adminUser,
-                uid: auth.currentUser.uid
-              });
-            }
-          } catch (e) {
-            console.error('[Admin] Firestore 프로필 저장 실패:', e);
-          }
-        }
-
-        return adminUser;
-      }
-
-      // Firebase Auth 로그인
+      // 관리자도 일반 사용자와 동일하게 Firebase Auth로 로그인한다.
+      // 관리자 권한은 해당 계정의 Firestore users 문서 role='ADMIN'으로 결정되며,
+      // 이 값은 Firebase Console에서 최초 1회만 설정한다(앱에서는 role 변경 불가 — 규칙이 차단).
+      // (이전의 VITE_ADMIN_ID/PW 방식은 자격증명이 번들에 노출되고, 로그인 시 계정을
+      //  즉석 생성하며, 보안 규칙과도 충돌하여 제거함.)
       const email = toEmail(normalizedId);
 
       const userCredential = await signInWithEmailAndPassword(auth, email, password);

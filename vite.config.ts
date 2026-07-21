@@ -24,6 +24,17 @@ function devApiPlugin(env: Record<string, string>): Plugin {
         }
 
         try {
+          // 프로덕션과 동일하게 Firebase ID 토큰 검증
+          const { verifyFirebaseToken } = await import('./api/_lib/verifyAuth');
+          const projectId = env.VITE_FIREBASE_PROJECT_ID || 'gachiic';
+          const authed = await verifyFirebaseToken(req.headers.authorization as string | undefined, projectId);
+          if (!authed) {
+            res.statusCode = 401;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ error: '로그인이 필요합니다.' }));
+            return;
+          }
+
           const chunks: Buffer[] = [];
           for await (const chunk of req) chunks.push(chunk as Buffer);
           const { prompt, options = {}, images = [] } = JSON.parse(Buffer.concat(chunks).toString('utf-8') || '{}');

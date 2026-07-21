@@ -1,6 +1,18 @@
 // AI 생성 클라이언트 — 서버 프록시(/api/gemini, AI Gateway 경유)만 호출한다.
 // 이전의 "프록시 실패 시 브라우저에서 Google API 직접 호출" 폴백은 API 키가
 // 번들에 노출되는 보안 문제가 있어 제거됨. 모델 선택/폴백/재시도는 서버가 담당.
+import { auth } from './firebase';
+
+// 서버 인증용 Firebase ID 토큰을 Authorization 헤더로 부착
+// (서버는 로그인한 사용자 요청만 허용 — 유료 크레딧 무단 소진 방지)
+async function buildHeaders(): Promise<Record<string, string>> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    try {
+        const token = await auth.currentUser?.getIdToken();
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+    } catch { /* 토큰 획득 실패 시 서버가 401로 응답 */ }
+    return headers;
+}
 
 // 기존 호출부(@google/generative-ai의 SchemaType)와의 호환용 스키마 타입 상수
 // 값은 JSON Schema 타입 문자열과 동일하다.
@@ -46,7 +58,7 @@ export async function generateContentDetailed<T = any>(
     try {
         const response = await fetch('/api/gemini', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: await buildHeaders(),
             body: JSON.stringify({ prompt, options, images }),
             signal: controller.signal,
         });
@@ -86,7 +98,7 @@ export async function generateContent<T = any>(
     try {
         const response = await fetch('/api/gemini', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: await buildHeaders(),
             body: JSON.stringify({ prompt, options, images }),
             signal: controller.signal,
         });

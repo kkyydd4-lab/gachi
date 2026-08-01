@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { generateContent } from '../services/gemini';
 import { UserAccount, DiagnosticPassage, GradeGroupType, Asset, TestSession, AgentStatus, BlueprintDebugInfo, WrongAnswerRecord } from '../types';
 import { AssetService, LearningSessionService, SessionService } from '../services/api';
@@ -87,6 +87,11 @@ const DiagnosticView: React.FC<DiagnosticViewProps> = ({ user, onSaveResult, onE
   const [questionStartTime, setQuestionStartTime] = useState<number>(Date.now());
   const [testStartTime] = useState<number>(Date.now());
   const [currentQuestionId, setCurrentQuestionId] = useState<number | null>(null);
+
+  // 결과 계산 재진입 가드.
+  // "제출" 버튼과 제한시간 만료(onTimeUp)가 동시에 발생하면 채점이 두 번 돌면서
+  // AI 처방 생성이 중복 호출(유료 크레딧 2배)되고 결과도 두 번 저장된다.
+  const isFinalizingRef = useRef(false);
 
 
   // ========================================
@@ -307,163 +312,173 @@ const DiagnosticView: React.FC<DiagnosticViewProps> = ({ user, onSaveResult, onE
 
   const generatePrescription = async (weakestCompetency: string, grade: string): Promise<any> => {
     try {
-      const competencyGuide: Record<string, string> = {
-        '어휘력': '문맥 속 어휘 추론, 유의어/반의어 구별, 관용 표현 이해에 어려움을 보이는',
-        '사실적 이해': '지문에 명시된 정보를 정확하게 찾고 파악하는 데 어려움을 보이는',
-        '추론적 이해': '글에 직접 드러나지 않은 의미를 유추하고 원인·결과를 파악하는 데 어려움을 보이는',
-        '구조적 이해': '글의 전체 구조, 문단 간 관계, 주제 파악에 어려움을 보이는',
-        '비판적 이해': '글쓴이의 의도나 관점을 평가하고 논증의 타당성을 판단하는 데 어려움을 보이는',
-      };
-
-      const prompt = `당신은 20년 경력의 한국어 문해력 교육 전문가이자 독서 지도사입니다.
-
-다음 조건에 맞는 맞춤형 처방전을 JSON 형식으로 작성하세요.
-
-[학생 정보]
-- 학년: ${grade}
-- 약점 역량: ${weakestCompetency}
-- 상세: ${competencyGuide[weakestCompetency] || weakestCompetency + '에 어려움을 보이는'} 학생
-
-[처방전 작성 규칙]
-1. **추천 도서 2권**: 
-   - 반드시 한국에서 실제 출판된 도서만 추천하세요 (ISBN이 존재하는 도서)
-   - 학년 수준에 맞는 도서 (너무 쉽거나 어렵지 않게)
-   - 각 도서가 해당 역량 향상에 도움이 되는 이유를 구체적으로 설명
-   - 유명 출판사(창비, 문학동네, 비룡소, 사계절, 웅진 등)의 도서 우선
-2. **성장 미션 1개**:
-   - ${weakestCompetency} 역량을 직접적으로 훈련하는 구체적 활동
-   - 학부모가 가정에서 지도할 수 있는 실천 가능한 미션
-   - 기간: 1~2주 단위
-
-[출력 JSON 형식]
-{
-  "targetCompetency": "${weakestCompetency}",
-  "recommendedBooks": [
-    { "title": "도서명", "author": "저자명", "reason": "이 도서가 ${weakestCompetency} 향상에 도움이 되는 구체적 이유" }
-  ],
-  "mission": {
-    "title": "미션 제목",
-    "description": "구체적인 활동 설명 (기간, 방법, 기대효과 포함)"
-  }
-}`;
-      const result = await generateContent(prompt, {
-        responseMimeType: "application/json"
-      });
-      return result;
-    } catch (e) { return null; }
-  };
-
-  const calculateResults = async () => {
-    if (passages.length === 0 || !user) return;
-    setIsAnalyzing(true);
-
-    const allQuestions = passages.flatMap(p => p.questions);
-    const totalQuestionsAll = allQuestions.length;
-    const totalCorrectAll = allQuestions.filter(q => answers[q.id] === q.answer).length;
-
-    const categories = ['어휘력', '사실적 이해', '추론적 이해', '비판적 이해', '구조적 이해'];
-    // 역량별 참조 평균 (실제 응시자 데이터 축적 전까지 교육학 연구 기반 차등값 사용)
-    const referenceAverages: Record<string, number> = {
-      '어휘력': 72,       // 가장 친숙한 영역, 평균 높음
-      '사실적 이해': 70,   // 직접적 정보 확인, 비교적 쉬움
-      '추론적 이해': 58,   // 고차 사고력 필요, 평균 낮음
-      '구조적 이해': 55,   // 글의 구조 파악, 훈련 필요
-      '비판적 이해': 52,   // 가장 어려운 역량, 평균 최저
-    };
-    const competencyResults = categories.map(cat => {
-      const catQuestions = allQuestions.filter(q => q.category.includes(cat));
-      const totalCount = catQuestions.length;
-      const correctCount = catQuestions.filter(q => answers[q.id] === q.answer).length;
-      const score = totalCount > 0 ? (correctCount / totalCount) * 100 : 0;
-      return { label: cat, score: Math.round(score), average: referenceAverages[cat] || 60, correct: correctCount, total: totalCount };
-    });
-
-    // 문항 수 기반 가중평균: 전체 정답수/전체 문항수 × 100
-    const totalCorrectWeighted = competencyResults.reduce((acc, c) => acc + c.correct, 0);
-    const totalCountWeighted = competencyResults.reduce((acc, c) => acc + c.total, 0);
-    const totalScore = totalCountWeighted > 0
-      ? Math.round((totalCorrectWeighted / totalCountWeighted) * 100)
-      : 0;
-
-    // 실제로 출제된(문항 수 > 0) 역량만 취약점 후보 — 미평가 역량(0점)에 처방이 나가는 것 방지
-    const evaluated = competencyResults.filter(c => c.total > 0);
-    const weakest = [...evaluated].sort((a, b) => a.score - b.score)[0];
-    let prescription = undefined;
-    if (weakest && weakest.score < 80) {
-      prescription = await generatePrescription(weakest.label, user.grade);
-    }
-
-    const wrongAnswers: WrongAnswerRecord[] = allQuestions
-      .filter(q => answers[q.id] !== q.answer)
-      .map(q => {
-        const passage = passages.find(p => p.questions.some(pq => pq.id === q.id));
-        return {
-          questionId: q.id,
-          passageTitle: passage?.title || '',
-          category: q.category,
-          question: q.question,
-          options: q.options,
-          userAnswer: answers[q.id] || 0,
-          correctAnswer: q.answer,
-          rationale: q.rationale || ''
+        const competencyGuide: Record<string, string> = {
+          '어휘력': '문맥 속 어휘 추론, 유의어/반의어 구별, 관용 표현 이해에 어려움을 보이는',
+          '사실적 이해': '지문에 명시된 정보를 정확하게 찾고 파악하는 데 어려움을 보이는',
+          '추론적 이해': '글에 직접 드러나지 않은 의미를 유추하고 원인·결과를 파악하는 데 어려움을 보이는',
+          '구조적 이해': '글의 전체 구조, 문단 간 관계, 주제 파악에 어려움을 보이는',
+          '비판적 이해': '글쓴이의 의도나 관점을 평가하고 논증의 타당성을 판단하는 데 어려움을 보이는',
         };
+
+        const prompt = `당신은 20년 경력의 한국어 문해력 교육 전문가이자 독서 지도사입니다.
+
+  다음 조건에 맞는 맞춤형 처방전을 JSON 형식으로 작성하세요.
+
+  [학생 정보]
+  - 학년: ${grade}
+  - 약점 역량: ${weakestCompetency}
+  - 상세: ${competencyGuide[weakestCompetency] || weakestCompetency + '에 어려움을 보이는'} 학생
+
+  [처방전 작성 규칙]
+  1. **추천 도서 2권**: 
+     - 반드시 한국에서 실제 출판된 도서만 추천하세요 (ISBN이 존재하는 도서)
+     - 학년 수준에 맞는 도서 (너무 쉽거나 어렵지 않게)
+     - 각 도서가 해당 역량 향상에 도움이 되는 이유를 구체적으로 설명
+     - 유명 출판사(창비, 문학동네, 비룡소, 사계절, 웅진 등)의 도서 우선
+  2. **성장 미션 1개**:
+     - ${weakestCompetency} 역량을 직접적으로 훈련하는 구체적 활동
+     - 학부모가 가정에서 지도할 수 있는 실천 가능한 미션
+     - 기간: 1~2주 단위
+
+  [출력 JSON 형식]
+  {
+    "targetCompetency": "${weakestCompetency}",
+    "recommendedBooks": [
+      { "title": "도서명", "author": "저자명", "reason": "이 도서가 ${weakestCompetency} 향상에 도움이 되는 구체적 이유" }
+    ],
+    "mission": {
+      "title": "미션 제목",
+      "description": "구체적인 활동 설명 (기간, 방법, 기대효과 포함)"
+    }
+  }`;
+        const result = await generateContent(prompt, {
+          responseMimeType: "application/json"
+        });
+        return result;
+      } catch (e) { return null; }
+    };
+
+    const calculateResults = async () => {
+      if (passages.length === 0 || !user) return;
+      if (isFinalizingRef.current) return; // 이미 채점 중이거나 완료됨
+      isFinalizingRef.current = true;
+      setIsAnalyzing(true);
+
+      try {
+      const allQuestions = passages.flatMap(p => p.questions);
+      const totalQuestionsAll = allQuestions.length;
+      const totalCorrectAll = allQuestions.filter(q => answers[q.id] === q.answer).length;
+
+      const categories = ['어휘력', '사실적 이해', '추론적 이해', '비판적 이해', '구조적 이해'];
+      // 역량별 참조 평균 (실제 응시자 데이터 축적 전까지 교육학 연구 기반 차등값 사용)
+      const referenceAverages: Record<string, number> = {
+        '어휘력': 72,       // 가장 친숙한 영역, 평균 높음
+        '사실적 이해': 70,   // 직접적 정보 확인, 비교적 쉬움
+        '추론적 이해': 58,   // 고차 사고력 필요, 평균 낮음
+        '구조적 이해': 55,   // 글의 구조 파악, 훈련 필요
+        '비판적 이해': 52,   // 가장 어려운 역량, 평균 최저
+      };
+      const competencyResults = categories.map(cat => {
+        const catQuestions = allQuestions.filter(q => q.category.includes(cat));
+        const totalCount = catQuestions.length;
+        const correctCount = catQuestions.filter(q => answers[q.id] === q.answer).length;
+        const score = totalCount > 0 ? (correctCount / totalCount) * 100 : 0;
+        return { label: cat, score: Math.round(score), average: referenceAverages[cat] || 60, correct: correctCount, total: totalCount };
       });
 
-    // 5단계 레벨 체계 (교육학적 세분화)
-    const getLevelInfo = (score: number): { level: string; percentile: number } => {
-      if (score >= 90) return { level: '가치 Grand Master', percentile: 3 };
-      if (score >= 80) return { level: '가치 Master', percentile: 10 };
-      if (score >= 70) return { level: '가치 Expert', percentile: 25 };
-      if (score >= 55) return { level: '가치 Challenger', percentile: 45 };
-      return { level: '가치 Explorer', percentile: 65 };
-    };
-    const { level, percentile } = getLevelInfo(totalScore);
+      // 문항 수 기반 가중평균: 전체 정답수/전체 문항수 × 100
+      const totalCorrectWeighted = competencyResults.reduce((acc, c) => acc + c.correct, 0);
+      const totalCountWeighted = competencyResults.reduce((acc, c) => acc + c.total, 0);
+      const totalScore = totalCountWeighted > 0
+        ? Math.round((totalCorrectWeighted / totalCountWeighted) * 100)
+        : 0;
 
-    const resultObj: NonNullable<UserAccount['testResult']> = {
-      totalScore,
-      competencies: competencyResults,
-      level,
-      percentile,
-      generatedAt: new Date().toISOString(),
-      wrongAnswers,
-      prescription
-    };
+      // 실제로 출제된(문항 수 > 0) 역량만 취약점 후보 — 미평가 역량(0점)에 처방이 나가는 것 방지
+      const evaluated = competencyResults.filter(c => c.total > 0);
+      const weakest = [...evaluated].sort((a, b) => a.score - b.score)[0];
+      let prescription = undefined;
+      if (weakest && weakest.score < 80) {
+        prescription = await generatePrescription(weakest.label, user.grade);
+      }
 
-    if (session) {
-      const categoryScores: Record<string, { correct: number; total: number; rate: number }> = {};
-      competencyResults.forEach(comp => {
-        categoryScores[comp.label] = { correct: comp.correct, total: comp.total, rate: comp.score };
-      });
+      const wrongAnswers: WrongAnswerRecord[] = allQuestions
+        .filter(q => answers[q.id] !== q.answer)
+        .map(q => {
+          const passage = passages.find(p => p.questions.some(pq => pq.id === q.id));
+          return {
+            questionId: q.id,
+            passageTitle: passage?.title || '',
+            category: q.category,
+            question: q.question,
+            options: q.options,
+            userAnswer: answers[q.id] || 0,
+            correctAnswer: q.answer,
+            rationale: q.rationale || ''
+          };
+        });
 
-      const usedAssetIds = passages.map(p => (p as any).assetId).filter(Boolean);
+      // 5단계 레벨 체계 (교육학적 세분화)
+      const getLevelInfo = (score: number): { level: string; percentile: number } => {
+        if (score >= 90) return { level: '가치 Grand Master', percentile: 3 };
+        if (score >= 80) return { level: '가치 Master', percentile: 10 };
+        if (score >= 70) return { level: '가치 Expert', percentile: 25 };
+        if (score >= 55) return { level: '가치 Challenger', percentile: 45 };
+        return { level: '가치 Explorer', percentile: 65 };
+      };
+      const { level, percentile } = getLevelInfo(totalScore);
 
-      const updatedSession: TestSession = {
-        ...session,
-        learningSessionId: currentSessionId || undefined,
-        assetIds: usedAssetIds, // [Duplicate Prevention] Save used assets
-        summary: {
-          ...session.summary,
-          totalScore,
-          totalQuestions: totalQuestionsAll,
-          correctCount: totalCorrectAll,
-          durationSec: Math.round((Date.now() - testStartTime) / 1000),
-          completedAt: new Date().toISOString(),
-          categoryScores
-        }
+      const resultObj: NonNullable<UserAccount['testResult']> = {
+        totalScore,
+        competencies: competencyResults,
+        level,
+        percentile,
+        generatedAt: new Date().toISOString(),
+        wrongAnswers,
+        prescription
       };
 
-      Analytics.saveSessionToFirebase(updatedSession).then(success => {
-        if (success) Analytics.clearSession();
-      });
+      if (session) {
+        const categoryScores: Record<string, { correct: number; total: number; rate: number }> = {};
+        competencyResults.forEach(comp => {
+          categoryScores[comp.label] = { correct: comp.correct, total: comp.total, rate: comp.score };
+        });
+
+        const usedAssetIds = passages.map(p => (p as any).assetId).filter(Boolean);
+
+        const updatedSession: TestSession = {
+          ...session,
+          learningSessionId: currentSessionId || undefined,
+          assetIds: usedAssetIds, // [Duplicate Prevention] Save used assets
+          summary: {
+            ...session.summary,
+            totalScore,
+            totalQuestions: totalQuestionsAll,
+            correctCount: totalCorrectAll,
+            durationSec: Math.round((Date.now() - testStartTime) / 1000),
+            completedAt: new Date().toISOString(),
+            categoryScores
+          }
+        };
+
+        Analytics.saveSessionToFirebase(updatedSession).then(success => {
+          if (success) Analytics.clearSession();
+        });
+      }
+
+      setFinalResult(resultObj);
+      setIsAnalyzing(false);
+      setShowResult(true);
+
+      // 결과를 즉시 저장 — 결과 화면에서 새로고침/이탈해도 유실되지 않도록
+      setSaveStatus('saving');
+      onSaveResult(resultObj).then(ok => setSaveStatus(ok ? 'saved' : 'failed'));
+    } catch (error) {
+      // 채점 도중 예기치 못한 오류 — 가드를 풀어 학생이 다시 제출할 수 있게 한다
+      console.error('[Diagnostic] 결과 계산 실패:', error);
+      isFinalizingRef.current = false;
+      setIsAnalyzing(false);
+      alert('결과를 계산하는 중 문제가 발생했습니다. 다시 제출해주세요.');
     }
-
-    setFinalResult(resultObj);
-    setIsAnalyzing(false);
-    setShowResult(true);
-
-    // 결과를 즉시 저장 — 결과 화면에서 새로고침/이탈해도 유실되지 않도록
-    setSaveStatus('saving');
-    onSaveResult(resultObj).then(ok => setSaveStatus(ok ? 'saved' : 'failed'));
   };
 
   const handleRetrySave = () => {

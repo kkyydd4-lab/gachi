@@ -34,17 +34,24 @@ const DiagnosticTest: React.FC<DiagnosticTestProps> = ({
     const scrollPositions = useRef<Record<number, number>>({});
 
     // 전체 제한시간 타이머
+    // onTimeUp은 부모가 매 렌더마다 새로 만드는 함수라, 의존성에 그대로 넣으면
+    // 학생이 보기를 고를 때마다 interval이 파기·재생성되어 진행 중이던 1초가 버려진다.
+    // (제한시간이 실제보다 느리게 흐르는 원인) → ref에 담아 타이머와 분리한다.
+    const onTimeUpRef = useRef(onTimeUp);
+    useEffect(() => { onTimeUpRef.current = onTimeUp; }, [onTimeUp]);
+
     useEffect(() => {
-        if (remainingSec === null) return;
-        if (remainingSec <= 0) {
-            onTimeUp?.();
-            return;
-        }
+        if (timeLimitMin == null) return;
         const timer = setInterval(() => {
-            setRemainingSec(prev => (prev !== null ? prev - 1 : null));
+            setRemainingSec(prev => (prev === null || prev <= 0 ? prev : prev - 1));
         }, 1000);
         return () => clearInterval(timer);
-    }, [remainingSec, onTimeUp]);
+    }, [timeLimitMin]);
+
+    // 0초 도달 시 1회만 자동 제출
+    useEffect(() => {
+        if (remainingSec === 0) onTimeUpRef.current?.();
+    }, [remainingSec]);
 
     // 지문 변경 시 스크롤 위치 저장/복원 + 모바일 탭 리셋
     useEffect(() => {

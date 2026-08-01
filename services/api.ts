@@ -6,6 +6,7 @@ import {
   createUserWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
+  deleteUser,
   User as FirebaseUser
 } from 'firebase/auth';
 import {
@@ -71,8 +72,15 @@ export const AuthService = {
         return { ...userDoc.data(), uid: userDoc.id } as UserAccount;
       }
 
-      return null;
+      // Auth 인증은 통과했지만 프로필 문서가 없는 상태(가입이 중간에 끊긴 계정).
+      // 로그인된 채로 두면 이후 모든 요청이 권한 오류가 되므로 즉시 세션을 정리하고
+      // 사용자가 상황을 알 수 있는 메시지를 준다.
+      await signOut(auth).catch(() => { });
+      throw new Error('가입이 완료되지 않은 계정입니다. 관리자에게 문의해주세요.');
     } catch (error: any) {
+      // 위에서 우리가 직접 던진 메시지는 그대로 전달 (Firebase 에러 코드가 없음)
+      if (!error?.code) throw error;
+
       console.error('Login error:', error);
 
       // 에러 메시지 한국어로 변환
@@ -104,13 +112,26 @@ export const AuthService = {
         id: user.id, // 원래 ID 유지
       };
 
-      await setDoc(doc(db, USERS_COLLECTION, userCredential.user.uid), userData);
+      try {
+        await setDoc(doc(db, USERS_COLLECTION, userCredential.user.uid), userData);
+      } catch (profileError) {
+        // 프로필 저장에 실패하면 Auth 계정만 남아 "로그인도 재가입도 불가능한" 상태가 된다.
+        // 방금 만든 계정을 되돌려서 같은 아이디로 다시 가입할 수 있게 한다.
+        console.error('Signup profile write failed, rolling back auth account:', profileError);
+        await deleteUser(userCredential.user).catch((rollbackError) => {
+          console.error('Auth account rollback failed:', rollbackError);
+        });
+        throw new Error('회원 정보 저장에 실패했습니다. 잠시 후 다시 시도해주세요.');
+      }
 
       // 가입 후 로그아웃 (로그인 페이지로 돌아가도록)
       await signOut(auth);
 
       return true;
     } catch (error: any) {
+      // 위에서 우리가 직접 던진 메시지는 그대로 전달
+      if (!error?.code) throw error;
+
       console.error('Signup error:', error);
 
       if (error.code === 'auth/email-already-in-use') {

@@ -133,6 +133,73 @@ async function main() {
   console.log('학년군별 지문:', byGrade);
   console.log('상태별 지문:', byStatus);
 
+  // ============================================================
+  // 문항 유형 다양성 진단
+  // "문항이 다 비슷해 보인다"를 감이 아니라 수치로 확인하기 위한 구간.
+  // 실제 다양성을 만드는 요소는 세 가지뿐이다 — 발문 문장, 지문 마크업, <보기> 상자.
+  // (types/domain.ts의 type 필드는 렌더링에 쓰이지 않으므로 집계 대상이 아니다)
+  // ============================================================
+  {
+    const stems = {};          // 발문 끝맺음 패턴별 개수
+    const exactDup = {};       // 완전히 동일한 발문
+    const byCategory = {};
+    let withBox = 0;           // <보기> 상자를 쓴 문항
+    let passageWithUnderline = 0, passageWithBlank = 0;
+
+    for (const a of assets) {
+      const c = a.content || '';
+      if (/\[밑줄:|\[문장밑줄:/.test(c)) passageWithUnderline++;
+      if (/\[빈칸\]|\(   \)/.test(c)) passageWithBlank++;
+
+      for (const q of (a.questions || [])) {
+        const text = String(q.question || '').replace(/\s+/g, ' ').trim();
+        if (!text) continue;
+
+        // 발문의 끝 12자로 유형을 묶는다 ("~적절한 것은?", "~알 수 있는 것은?" 등)
+        const key = text.replace(/\s+/g, '').slice(-12);
+        stems[key] = (stems[key] || 0) + 1;
+        exactDup[text] = (exactDup[text] || 0) + 1;
+        byCategory[q.category] = (byCategory[q.category] || 0) + 1;
+        if (q.context && q.context.content) withBox++;
+      }
+    }
+
+    const stemEntries = Object.entries(stems).sort((a, b) => b[1] - a[1]);
+    const pct = (n, d) => d > 0 ? `${Math.round((n / d) * 100)}%` : '0%';
+
+    console.log(`\n${'='.repeat(60)}`);
+    console.log('📊 문항 유형 다양성');
+    console.log('='.repeat(60));
+
+    console.log('\n[역량별 문항 수]');
+    Object.entries(byCategory).sort((a, b) => b[1] - a[1])
+      .forEach(([k, v]) => console.log(`  ${String(v).padStart(4)}개 (${pct(v, totalQ).padStart(4)})  ${k}`));
+
+    console.log(`\n[발문 패턴]  서로 다른 패턴 ${stemEntries.length}종 / 전체 ${totalQ}문항`);
+    const top = stemEntries.slice(0, 12);
+    top.forEach(([k, v]) => console.log(`  ${String(v).padStart(4)}개 (${pct(v, totalQ).padStart(4)})  ...${k}`));
+    const top3Share = stemEntries.slice(0, 3).reduce((s, [, v]) => s + v, 0);
+    console.log(`\n  → 상위 3개 패턴이 전체의 ${pct(top3Share, totalQ)}를 차지`);
+    if (totalQ > 0 && top3Share / totalQ > 0.5) {
+      console.log('  ⚠️  절반 이상이 같은 3개 발문에 몰려 있습니다. 발문을 다양화하세요.');
+      console.log('     docs/question-types.md 의 유형 카탈로그를 참고하세요.');
+    }
+
+    const dups = Object.entries(exactDup).filter(([, v]) => v > 1).sort((a, b) => b[1] - a[1]);
+    if (dups.length > 0) {
+      console.log(`\n[완전히 똑같은 발문] ${dups.length}종`);
+      dups.slice(0, 8).forEach(([k, v]) => console.log(`  ${v}회  ${k.slice(0, 50)}${k.length > 50 ? '...' : ''}`));
+    }
+
+    console.log('\n[문항 형식 활용도]');
+    console.log(`  <보기> 상자 사용 문항 : ${withBox}개 (${pct(withBox, totalQ)})`);
+    console.log(`  밑줄 마크업 있는 지문 : ${passageWithUnderline}개 (${pct(passageWithUnderline, assets.length)})`);
+    console.log(`  빈칸 있는 지문        : ${passageWithBlank}개 (${pct(passageWithBlank, assets.length)})`);
+    if (totalQ > 0 && withBox / totalQ < 0.1) {
+      console.log('  ⚠️  <보기> 상자를 거의 쓰지 않고 있습니다 — 비판적·구조적 이해 문항에 효과적입니다.');
+    }
+  }
+
   const crit = issues.filter(i => i.level === 'critical');
   const warn = issues.filter(i => i.level === 'warn');
 

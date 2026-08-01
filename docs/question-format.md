@@ -3,6 +3,8 @@
 새 지문·문항을 만들어 Firestore에 추가할 때 지켜야 할 형식을 정리한 문서다.
 이 형식을 벗어나면 학생 화면에서 문항이 깨지거나, 채점이 틀리거나, 아예 출제되지 않는다.
 
+> 발문을 어떻게 다양화할지는 별도 문서로 정리했다 → [문항 유형 카탈로그](./question-types.md)
+
 > 이 문서의 모든 규칙은 실제 코드 기준이다.
 > 검증 로직: [`scripts/audit-assets.mjs`](../scripts/audit-assets.mjs)
 > 타입 정의: [`types/domain.ts`](../types/domain.ts)
@@ -133,7 +135,7 @@ options[4] → answer: 5
 |---|---|
 | `id` | 지문 **안에서만** 고유하면 된다 (1, 2, 3...). 시험 출제 시 전체 통합 번호로 자동 재부여된다 |
 | `rationale` | 해설. 없으면 경고. **오답 복습 화면에 그대로 노출**되므로 "정답인 이유 + 주요 오답이 틀린 이유"를 함께 쓴다 |
-| `type` | `UNDERLINE_INTENT` / `BLANK_INFERENCE` / `BOX_EXAMPLE` / `SENTENCE_INSERTION` / `NORMAL` |
+| `type` | `UNDERLINE_INTENT` 등 5종. ⚠️ **현재 화면 렌더링에 쓰이지 않는다** — 채워도 문항 모양은 달라지지 않으므로 분류 메모 용도로만 쓸 것 |
 | `context` | 보기 박스. `{ "content": "보기 내용", "type": "BOX" }` — 문항 아래에 별도 상자로 렌더링된다 |
 
 ### 정답 번호 쏠림 주의

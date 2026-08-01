@@ -93,8 +93,17 @@ JSON으로만 응답하세요.`;
 }
 
 async function main() {
-  const adminPw = process.argv.find(a => a.startsWith('--pw='))?.slice(5) || 'admin!@#$%^';
-  await signInWithEmailAndPassword(auth, 'admin@gachi.in', adminPw);
+  // 비밀번호는 코드에 두지 않는다 — 실행할 때 --pw= 로 넘기거나 ADMIN_PW 환경변수를 쓴다.
+  const adminId = process.argv.find(a => a.startsWith('--id='))?.slice(5) || 'admin@gachi.in';
+  const adminPw = process.argv.find(a => a.startsWith('--pw='))?.slice(5) || process.env.ADMIN_PW;
+  if (!adminPw) {
+    console.error('✖ 관리자 비밀번호가 필요합니다.');
+    console.error('  사용법: node scripts/repair-answers.mjs --id=<아이디> --pw=<비밀번호>');
+    console.error('  또는 ADMIN_PW 환경변수로 전달하세요.');
+    process.exit(1);
+  }
+  const email = adminId.includes('@') ? adminId : `${adminId}@gachi.in`;
+  await signInWithEmailAndPassword(auth, email, adminPw);
   const token = await auth.currentUser.getIdToken();
   console.log(`✔ 관리자 인증 완료 (모드: ${APPLY ? '🔴 실제 교정' : '🔵 미리보기'})\n`);
 

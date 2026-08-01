@@ -39,8 +39,15 @@ const MIN_PASSAGE = { '초등 저학년': 200, '초등 중학년': 350, '초등 
 
 async function main() {
   // 관리자 로그인 (Firestore 규칙상 인증 필요)
-  const adminId = process.argv.find(a => a.startsWith('--id='))?.slice(5) || 'admin';
-  const adminPw = process.argv.find(a => a.startsWith('--pw='))?.slice(5) || 'admin!@#$%^';
+  // 비밀번호는 코드에 두지 않는다 — 실행할 때 --pw= 로 넘기거나 ADMIN_PW 환경변수를 쓴다.
+  const adminId = process.argv.find(a => a.startsWith('--id='))?.slice(5) || env.ADMIN_ID || 'admin';
+  const adminPw = process.argv.find(a => a.startsWith('--pw='))?.slice(5) || process.env.ADMIN_PW;
+  if (!adminPw) {
+    console.error('✖ 관리자 비밀번호가 필요합니다.');
+    console.error('  사용법: node scripts/audit-assets.mjs --id=<아이디> --pw=<비밀번호>');
+    console.error('  또는 ADMIN_PW 환경변수로 전달하세요.');
+    process.exit(1);
+  }
   const email = adminId.includes('@') ? adminId : `${adminId}@gachi.in`;
   try {
     await signInWithEmailAndPassword(auth, email, adminPw);

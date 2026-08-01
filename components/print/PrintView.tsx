@@ -179,7 +179,9 @@ const PrintView: React.FC<PrintViewProps> = ({ sessionIdProp }) => {
             : mode === 'answer' ? '답안지'
                 : '정답 및 해설';
 
-    const Header = () => (
+    // 문제지는 한 번 뽑아 여러 학생이 돌려 쓰므로 이름·날짜란을 넣지 않는다.
+    // 기입란은 매번 새로 인쇄하는 답안지에만 둔다.
+    const Header: React.FC<{ withFields?: boolean }> = ({ withFields = false }) => (
         <div className="pr-head">
             <div className="pr-head-top">
                 <div>
@@ -192,12 +194,14 @@ const PrintView: React.FC<PrintViewProps> = ({ sessionIdProp }) => {
                     <div style={{ fontWeight: 800, color: '#111827' }}>{docTitle}</div>
                 </div>
             </div>
-            <div className="pr-fields">
-                <div className="pr-field"><span>이름</span><span className="pr-blank wide" /></div>
-                <div className="pr-field"><span>학교</span><span className="pr-blank wide" /></div>
-                <div className="pr-field"><span>날짜</span><span className="pr-blank" /></div>
-                <div className="pr-field" style={{ marginLeft: 'auto' }}><span>점수</span><span className="pr-blank narrow" /></div>
-            </div>
+            {withFields && (
+                <div className="pr-fields">
+                    <div className="pr-field"><span>이름</span><span className="pr-blank wide" /></div>
+                    <div className="pr-field"><span>학교</span><span className="pr-blank wide" /></div>
+                    <div className="pr-field"><span>날짜</span><span className="pr-blank" /></div>
+                    <div className="pr-field" style={{ marginLeft: 'auto' }}><span>점수</span><span className="pr-blank narrow" /></div>
+                </div>
+            )}
         </div>
     );
 
@@ -222,6 +226,11 @@ const PrintView: React.FC<PrintViewProps> = ({ sessionIdProp }) => {
                 return (
                     <div className="sheet" key={sec.asset.assetId}>
                         {idx === 0 && <Header />}
+                        {idx === 0 && (
+                            <p className="pr-notice">
+                                ※ 이 문제지에는 답을 적지 마세요. 답은 답안지에만 표시합니다.
+                            </p>
+                        )}
 
                         <div className="pr-section">
                             <div className="pr-section-label">
@@ -249,7 +258,7 @@ const PrintView: React.FC<PrintViewProps> = ({ sessionIdProp }) => {
             {/* ---------- 답안지 ---------- */}
             {mode === 'answer' && (
                 <div className="sheet">
-                    <Header />
+                    <Header withFields />
                     <div className="pr-block-title">답안 표기란</div>
                     <p style={{ fontSize: '9.5pt', color: '#6b7280', marginBottom: '5mm' }}>
                         정답이라고 생각하는 번호에 표시하세요.

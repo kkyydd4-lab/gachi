@@ -109,6 +109,18 @@
 .pr-blank.wide { min-width: 38mm; }
 .pr-blank.narrow { min-width: 16mm; }
 
+/* 문제지 상단 안내 (돌려 쓰는 문제지이므로 필기 금지 안내) */
+.pr-notice {
+  font-size: 9pt;
+  color: var(--pr-sub);
+  margin: -3mm 0 5mm;
+  padding: 1.5mm 3mm;
+  border-left: 2.5px solid var(--pr-line-strong);
+  background: #f9fafb;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
 /* --- 지문 구간 --- */
 /* 지문 하나가 용지 한 장(.sheet)을 차지한다 — 문제집 관례이자,
    화면 미리보기와 실제 출력의 쪽 구분을 일치시키기 위함 */
@@ -129,13 +141,18 @@
   margin-left: 2mm;
 }
 
-/* 지문 본문 상자 */
+/* 지문 본문 상자.
+   break-inside: avoid — 지문이 페이지 중간에서 잘리지 않게 한다.
+   그 결과 "1쪽=지문, 2쪽=문항" 형태로 자연스럽게 나뉜다.
+   (지문이 한 페이지보다 길면 브라우저가 이 지시를 무시하고 나눈다 — 정상 동작) */
 .pr-passage {
   border: 1.2px solid var(--pr-line-strong);
   border-radius: 2mm;
   padding: 5mm 6mm;
   margin-bottom: 5mm;
   background: #fff;
+  break-inside: avoid;
+  page-break-inside: avoid;
 }
 
 .pr-passage-title {
@@ -444,6 +461,22 @@
 }
 
 @media print {
+  /* ⚠️ 앱 최상위 래퍼(App.tsx)는 `min-h-screen flex flex-col`이다.
+     flex 항목은 브라우저가 페이지 경계에서 잘라내지 못해, 한 장을 넘는 내용이
+     통째로 잘리거나 빈 페이지가 생긴다. 인쇄에서는 일반 블록으로 되돌린다. */
+  html,
+  body {
+    height: auto !important;
+    margin: 0 !important;
+  }
+
+  body > #root,
+  body > #root > div {
+    display: block !important;
+    min-height: 0 !important;
+    height: auto !important;
+  }
+
   /* 앱 전역 요소 숨김 — 인쇄 화면만 남긴다 */
   body > #root > div > *:not(.print-root) { display: none !important; }
 

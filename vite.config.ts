@@ -9,8 +9,12 @@ function devApiPlugin(env: Record<string, string>): Plugin {
     name: 'dev-api-gemini',
     configureServer(server) {
       // ai SDK가 읽는 인증 환경변수를 .env에서 전달
-      if (env.AI_GATEWAY_API_KEY && !process.env.AI_GATEWAY_API_KEY) {
-        process.env.AI_GATEWAY_API_KEY = env.AI_GATEWAY_API_KEY;
+      // `vercel env pull`은 민감 변수를 "[SENSITIVE]" 같은 자리표시자로 내려주는데,
+      // 이 가짜 값을 그대로 넘기면 정상 OIDC 인증을 덮어써서 게이트웨이 호출이 전부 실패한다.
+      const gatewayKey = env.AI_GATEWAY_API_KEY?.trim();
+      const isPlaceholder = !gatewayKey || gatewayKey.startsWith('[') || gatewayKey.length < 20;
+      if (!isPlaceholder && !process.env.AI_GATEWAY_API_KEY) {
+        process.env.AI_GATEWAY_API_KEY = gatewayKey;
       }
       if (env.VERCEL_OIDC_TOKEN && !process.env.VERCEL_OIDC_TOKEN) {
         process.env.VERCEL_OIDC_TOKEN = env.VERCEL_OIDC_TOKEN;

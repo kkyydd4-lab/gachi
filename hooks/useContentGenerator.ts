@@ -64,13 +64,50 @@ const DEFAULT_QUESTION_SCHEMA: Schema = {
                     question: { type: Type.STRING },
                     options: { type: Type.ARRAY, items: { type: Type.STRING }, minItems: 5, maxItems: 5 },
                     answer: { type: Type.INTEGER },
+                    // 정답 선택지의 "전체 텍스트". 모델이 1-based/0-based를 혼동해도
+                    // 이 텍스트로 정확한 번호를 서버에서 다시 계산한다. (정답 밀림 사고 방지)
+                    answerText: { type: Type.STRING },
                     rationale: { type: Type.STRING },
                 },
-                required: ["question", "options", "answer", "category"],
+                required: ["question", "options", "answer", "answerText", "category"],
             },
         },
     },
     required: ["questions"],
+};
+
+/**
+ * 정답 번호(answer)를 1-based로 정규화한다.
+ * 모델이 지시를 무시하고 0-based로 답하는 사고가 반복되어(저장된 문항의 약 2/3),
+ * 정답 선택지 원문(answerText)과 대조해 실제 번호를 다시 계산한다.
+ * - answerText가 선택지와 일치하면 그 위치(1-based)를 정답으로 확정
+ * - 일치하지 않으면 answer가 0이거나 범위를 벗어난 경우만 보정
+ */
+export const normalizeAnswerIndex = (q: any) => {
+    const options: string[] = Array.isArray(q?.options) ? q.options : [];
+    if (options.length === 0) return q;
+
+    const norm = (s: unknown) =>
+        String(s ?? '').replace(/^[①-⑮0-9.)\s]+/, '').replace(/\s+/g, ' ').trim();
+
+    // 1) answerText로 위치 확정 (가장 신뢰도 높음)
+    const answerText = norm(q?.answerText);
+    if (answerText) {
+        let idx = options.findIndex(o => norm(o) === answerText);
+        if (idx === -1) idx = options.findIndex(o => norm(o).includes(answerText) || answerText.includes(norm(o)));
+        if (idx !== -1) return { ...q, answer: idx + 1 };
+    }
+
+    // 2) 텍스트 대조 실패 시: 범위를 벗어난 값만 보정 (0이면 0-based로 간주해 +1)
+    const ans = Number(q?.answer);
+    if (!Number.isInteger(ans) || ans < 1 || ans > options.length) {
+        const shifted = ans + 1;
+        if (Number.isInteger(ans) && shifted >= 1 && shifted <= options.length) {
+            return { ...q, answer: shifted };
+        }
+        return { ...q, answer: 1 }; // 최후: 사람이 검토하도록 1로 두되 검토 대기 상태로 저장됨
+    }
+    return q;
 };
 
 const getComplexityGuidelines = (grade: string): string => {
@@ -202,8 +239,11 @@ export const useContentGenerator = () => {
         - category (문자열: '어휘력' | '사실적 이해' | '추론적 이해' | '구조적 이해' | '비판적 이해' 중 택 1)
         - question (문자열)
         - options (문자열 5개 배열)
-        - answer (정수, 1-based 인덱스)
+        - answer (정수, 1-based 인덱스: 첫 번째 선택지가 1, 다섯 번째가 5. 0을 쓰지 마세요)
+        - answerText (문자열: 정답 선택지의 내용을 options에 있는 그대로 똑같이 복사)
         - rationale (문자열: 정답인 이유 + 오답인 이유 설명)
+
+        ⚠️ answer와 answerText는 반드시 같은 선택지를 가리켜야 합니다.
 
         대상 학년: ${grade}
       `;
@@ -211,6 +251,12 @@ export const useContentGenerator = () => {
             const result = await generateContent<QuestionGenerationResult>(prompt, {
                 responseSchema: options.responseSchema || DEFAULT_QUESTION_SCHEMA,
             });
+
+            // 정답 번호 정규화 — 모델이 0-based로 응답하는 사고가 반복되어,
+            // answerText(정답 선택지 원문)로 실제 번호를 다시 계산한다.
+            if (result?.questions) {
+                result.questions = result.questions.map(normalizeAnswerIndex);
+            }
 
             return result;
         } catch (err: any) {

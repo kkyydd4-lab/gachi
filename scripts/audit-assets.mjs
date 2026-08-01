@@ -39,13 +39,21 @@ const MIN_PASSAGE = { '초등 저학년': 200, '초등 중학년': 350, '초등 
 
 async function main() {
   // 관리자 로그인 (Firestore 규칙상 인증 필요)
-  // 비밀번호는 코드에 두지 않는다 — 실행할 때 --pw= 로 넘기거나 ADMIN_PW 환경변수를 쓴다.
-  const adminId = process.argv.find(a => a.startsWith('--id='))?.slice(5) || env.ADMIN_ID || 'admin';
-  const adminPw = process.argv.find(a => a.startsWith('--pw='))?.slice(5) || process.env.ADMIN_PW;
+  // 비밀번호는 코드에 두지 않는다. 아래 세 가지 중 하나로 전달한다.
+  //   1) .env.local 에 ADMIN_ID / ADMIN_PW 를 적어둔다 (권장 — 명령 기록에 남지 않음)
+  //   2) 환경변수 ADMIN_PW
+  //   3) 실행 인자 --pw=
+  // .env* 는 .gitignore 대상이라 저장소에 올라가지 않는다.
+  const adminId = process.argv.find(a => a.startsWith('--id='))?.slice(5)
+    || process.env.ADMIN_ID || env.ADMIN_ID || 'admin';
+  const adminPw = process.argv.find(a => a.startsWith('--pw='))?.slice(5)
+    || process.env.ADMIN_PW || env.ADMIN_PW;
   if (!adminPw) {
     console.error('✖ 관리자 비밀번호가 필요합니다.');
-    console.error('  사용법: node scripts/audit-assets.mjs --id=<아이디> --pw=<비밀번호>');
-    console.error('  또는 ADMIN_PW 환경변수로 전달하세요.');
+    console.error('  가장 쉬운 방법: .env.local 파일에 아래 두 줄을 추가하세요.');
+    console.error('    ADMIN_ID=admin');
+    console.error('    ADMIN_PW=<관리자 비밀번호>');
+    console.error('  (또는 실행 시 --id= --pw= 로 직접 전달)');
     process.exit(1);
   }
   const email = adminId.includes('@') ? adminId : `${adminId}@gachi.in`;
@@ -197,6 +205,28 @@ async function main() {
     console.log(`  빈칸 있는 지문        : ${passageWithBlank}개 (${pct(passageWithBlank, assets.length)})`);
     if (totalQ > 0 && withBox / totalQ < 0.1) {
       console.log('  ⚠️  <보기> 상자를 거의 쓰지 않고 있습니다 — 비판적·구조적 이해 문항에 효과적입니다.');
+    }
+
+    // 학년군별 — 학생은 자기 학년군 문항만 보므로 이 수치가 체감 다양성에 가깝다.
+    // 전체 합계로는 다양해 보여도 한 학년군 안에서는 같은 발문이 반복될 수 있다.
+    console.log('\n[학년군별 다양성]  (학생이 실제로 겪는 단위)');
+    for (const grade of ['초등 저학년', '초등 중학년', '초등 고학년', '중등']) {
+      const list = assets.filter(a => a.gradeGroup === grade);
+      if (list.length === 0) continue;
+      const qs = list.flatMap(a => a.questions || []);
+      const st = {};
+      let box = 0;
+      for (const q of qs) {
+        const t = String(q.question || '').replace(/\s+/g, '').trim();
+        if (!t) continue;
+        st[t.slice(-12)] = (st[t.slice(-12)] || 0) + 1;
+        if (q.context && q.context.content) box++;
+      }
+      const ent = Object.entries(st).sort((a, b) => b[1] - a[1]);
+      const top3 = ent.slice(0, 3).reduce((s, [, v]) => s + v, 0);
+      const flag = qs.length > 0 && top3 / qs.length > 0.4 ? ' ⚠️' : '';
+      console.log(`  ${grade.padEnd(7)} 문항 ${String(qs.length).padStart(3)}개 · 발문 ${String(ent.length).padStart(3)}종 · 상위3 ${pct(top3, qs.length).padStart(4)}${flag} · <보기> ${pct(box, qs.length)}`);
+      if (ent[0]) console.log(`  ${' '.repeat(7)}   └ 최다: ${ent[0][1]}개 ...${ent[0][0]}`);
     }
   }
 

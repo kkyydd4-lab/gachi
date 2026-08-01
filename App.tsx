@@ -10,6 +10,7 @@ import TeacherDashboard from '@/components/TeacherDashboard';
 import WritingView from '@/components/WritingView';
 import ReadingLogView from '@/components/ReadingLogView';
 import CareerView from '@/components/CareerView';
+import PrintView from '@/components/print/PrintView';
 import { UserAccount } from '@/types';
 import { AuthService } from '@/services/api';
 import { useAuthStore } from '@/stores/useAuthStore';
@@ -98,6 +99,19 @@ const App: React.FC = () => {
         <Route path="/admin" element={currentUser && currentUser.role === 'ADMIN' ? <AdminView onBack={handleLogout} adminName={currentUser.name} /> : <Navigate to={currentUser ? "/" : "/login"} />} />
 
         <Route path="/teacher" element={currentUser && currentUser.role === 'TEACHER' ? <TeacherDashboard user={currentUser} onLogout={handleLogout} /> : <Navigate to={currentUser ? "/" : "/login"} />} />
+
+        {/* 레이아웃 확인용 샘플 — 실제 학생 데이터가 없으므로 로그인 없이 열람 가능 */}
+        <Route path="/print/sample" element={<PrintView sessionIdProp="sample" />} />
+
+        {/* 평가지 인쇄 (관리자·교사 전용) */}
+        <Route
+          path="/print/:sessionId"
+          element={
+            currentUser && (currentUser.role === 'ADMIN' || currentUser.role === 'TEACHER')
+              ? <PrintView />
+              : <Navigate to={currentUser ? "/" : "/login"} />
+          }
+        />
 
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/" />} />

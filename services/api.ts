@@ -328,6 +328,17 @@ export const AssetService = {
     }
   },
 
+  // 단건 조회 (인쇄용 — 차시에 속한 지문만 골라 가져올 때 사용)
+  async getAssetById(assetId: string): Promise<Asset | null> {
+    try {
+      const snap = await getDoc(doc(db, ASSETS_COLLECTION, assetId));
+      return snap.exists() ? ({ ...snap.data(), assetId: snap.id } as Asset) : null;
+    } catch (error) {
+      console.error('Get asset by id error:', error);
+      return null;
+    }
+  },
+
   async createAsset(asset: Asset): Promise<void> {
     try {
       const assetRef = doc(db, ASSETS_COLLECTION, asset.assetId);
@@ -892,6 +903,17 @@ export const LearningSessionService = {
     } catch (error) {
       console.error('Get approved learning sessions error:', error);
       return [];
+    }
+  },
+
+  // 단건 조회 (인쇄용)
+  async getSessionById(sessionId: string): Promise<LearningSession | null> {
+    try {
+      const snap = await getDoc(doc(db, LEARNING_SESSIONS_COLLECTION, sessionId));
+      return snap.exists() ? (snap.data() as LearningSession) : null;
+    } catch (error) {
+      console.error('Get learning session by id error:', error);
+      return null;
     }
   },
 

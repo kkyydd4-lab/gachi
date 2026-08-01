@@ -1,0 +1,481 @@
+/* ============================================================
+   문제집 인쇄 스타일 (A4)
+
+   설계 원칙
+   - 화면에서는 A4 용지를 회색 배경 위에 흰 종이로 보여주는 "인쇄 미리보기" 형태.
+     그래서 인쇄하지 않아도 실제 출력 모양을 그대로 확인할 수 있다.
+   - 인쇄 시에는 배경/그림자/여백 시뮬레이션을 걷어내고 @page 여백만 적용한다.
+   - 색이 없어도(흑백 인쇄) 읽히도록 회색조와 테두리 위주로 구성한다.
+   ============================================================ */
+
+:root {
+  --pr-ink: #111827;
+  --pr-sub: #6b7280;
+  --pr-line: #d1d5db;
+  --pr-line-strong: #374151;
+}
+
+/* 인쇄 화면에서는 앱 전역 배경/폰트 영향을 받지 않도록 격리 */
+.print-root {
+  background: #9ca3af;
+  min-height: 100vh;
+  padding: 24px 0 64px;
+  font-family: 'Noto Sans KR', 'Malgun Gothic', sans-serif;
+  color: var(--pr-ink);
+}
+
+/* --- A4 용지 ---
+   화면 padding과 인쇄 @page margin을 같은 값(14/14/12mm)으로 맞춰야
+   미리보기와 실제 출력의 줄바꿈 위치가 일치한다. 한쪽만 바꾸지 말 것. */
+.sheet {
+  width: 210mm;
+  min-height: 297mm;
+  margin: 0 auto 24px;
+  padding: 14mm 14mm 12mm;
+  background-color: #fff;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, .28);
+  box-sizing: border-box;
+
+  /* 297mm마다 페이지 경계선을 그린다.
+     내용이 한 장에 들어가면 선이 용지 맨 아래 끝에 겹쳐 보이지 않고,
+     넘칠 때만 "여기서 다음 장으로 넘어갑니다" 표시로 나타난다. */
+  background-image: repeating-linear-gradient(to bottom,
+      transparent 0,
+      transparent calc(297mm - 1px),
+      rgba(220, 38, 38, .5) calc(297mm - 1px),
+      rgba(220, 38, 38, .5) 297mm);
+}
+
+/* --- 시험지 머리말 --- */
+.pr-head {
+  border-bottom: 3px solid var(--pr-line-strong);
+  padding-bottom: 4mm;
+  margin-bottom: 5mm;
+}
+
+.pr-head-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: 3mm;
+}
+
+.pr-brand {
+  font-size: 10pt;
+  font-weight: 700;
+  letter-spacing: .08em;
+  color: var(--pr-sub);
+}
+
+.pr-title {
+  font-size: 16.5pt;
+  font-weight: 900;
+  letter-spacing: -.02em;
+  margin: 1mm 0 0;
+}
+
+.pr-meta {
+  font-size: 9.5pt;
+  color: var(--pr-sub);
+  text-align: right;
+  line-height: 1.6;
+}
+
+/* 이름/날짜 기입란 */
+.pr-fields {
+  display: flex;
+  gap: 6mm;
+  font-size: 10pt;
+}
+
+.pr-field {
+  display: flex;
+  align-items: flex-end;
+  gap: 2mm;
+}
+
+.pr-field > span {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.pr-blank {
+  display: inline-block;
+  border-bottom: 1px solid var(--pr-line-strong);
+  min-width: 26mm;
+  height: 6mm;
+}
+
+.pr-blank.wide { min-width: 38mm; }
+.pr-blank.narrow { min-width: 16mm; }
+
+/* --- 지문 구간 --- */
+/* 지문 하나가 용지 한 장(.sheet)을 차지한다 — 문제집 관례이자,
+   화면 미리보기와 실제 출력의 쪽 구분을 일치시키기 위함 */
+.pr-section-label {
+  font-size: 11pt;
+  font-weight: 800;
+  margin-bottom: 3mm;
+}
+
+.pr-section-label .range {
+  margin-right: 2mm;
+}
+
+.pr-subject {
+  font-size: 9pt;
+  color: var(--pr-sub);
+  font-weight: 700;
+  margin-left: 2mm;
+}
+
+/* 지문 본문 상자 */
+.pr-passage {
+  border: 1.2px solid var(--pr-line-strong);
+  border-radius: 2mm;
+  padding: 5mm 6mm;
+  margin-bottom: 5mm;
+  background: #fff;
+}
+
+.pr-passage-title {
+  font-size: 12pt;
+  font-weight: 800;
+  text-align: center;
+  margin: 0 0 3.5mm;
+  padding-bottom: 2.5mm;
+  border-bottom: 1px dashed var(--pr-line);
+}
+
+/* 본문은 명조 계열 — 지문과 문항을 시각적으로 분리해 읽는 흐름을 만든다 */
+.pr-passage-body {
+  font-family: 'Noto Serif KR', 'Batang', '바탕', 'Times New Roman', serif;
+  font-size: 11pt;
+  line-height: 1.85;
+  text-align: justify;
+  word-break: keep-all;
+  white-space: pre-wrap;
+}
+
+/* 지문 내 마크업 */
+.pr-underline {
+  font-weight: 700;
+  border-bottom: 2px solid var(--pr-ink);
+  padding-bottom: 1px;
+}
+
+.pr-sentence-underline {
+  border-bottom: 1.2px solid var(--pr-ink);
+}
+
+.pr-marker {
+  display: inline-block;
+  font-weight: 800;
+  margin: 0 1px;
+}
+
+.pr-gap {
+  display: inline-block;
+  min-width: 22mm;
+  border-bottom: 1.4px solid var(--pr-ink);
+  text-align: center;
+  color: transparent;
+  user-select: none;
+}
+
+.pr-gap-box {
+  display: inline-block;
+  min-width: 16mm;
+  padding: 0 2mm;
+  border: 1.2px solid var(--pr-ink);
+  border-radius: 1mm;
+  text-align: center;
+  font-weight: 700;
+}
+
+/* --- 문항 --- */
+.pr-q {
+  break-inside: avoid;
+  page-break-inside: avoid;
+  margin-bottom: 4.5mm;
+}
+
+.pr-q-head {
+  display: flex;
+  gap: 2.5mm;
+  font-size: 10.5pt;
+  line-height: 1.55;
+  font-weight: 600;
+  margin-bottom: 2mm;
+  word-break: keep-all;
+}
+
+.pr-q-no {
+  font-weight: 900;
+  flex-shrink: 0;
+  min-width: 7mm;
+}
+
+/* 보기 상자 (<보기> 박스형 문항) */
+.pr-q-context {
+  border: 1px solid var(--pr-line-strong);
+  padding: 3.5mm 5mm;
+  margin: 0 0 3mm 9.5mm;
+  font-size: 10.5pt;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  word-break: keep-all;
+}
+
+.pr-q-context-label {
+  text-align: center;
+  font-weight: 800;
+  font-size: 9.5pt;
+  margin-bottom: 2mm;
+}
+
+/* 선택지 — 길이에 따라 1/2/5열로 자동 배치 */
+.pr-opts {
+  margin-left: 9.5mm;
+  font-size: 10pt;
+  line-height: 1.55;
+}
+
+.pr-opts.cols-1 { display: block; }
+
+.pr-opts.cols-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 6mm;
+}
+
+.pr-opts.cols-5 {
+  display: flex;
+  gap: 7mm;
+  flex-wrap: wrap;
+}
+
+.pr-opt {
+  display: flex;
+  gap: 1.5mm;
+  word-break: keep-all;
+  padding: .4mm 0;
+}
+
+.pr-opt-no { flex-shrink: 0; }
+
+/* --- 답안지 (OMR) --- */
+.pr-omr {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0 10mm;
+}
+
+.pr-omr-row {
+  display: flex;
+  align-items: center;
+  gap: 4mm;
+  padding: 2.2mm 2mm;
+  border-bottom: 1px solid var(--pr-line);
+  break-inside: avoid;
+}
+
+.pr-omr-no {
+  font-weight: 800;
+  font-size: 10.5pt;
+  min-width: 8mm;
+  text-align: right;
+}
+
+.pr-omr-cat {
+  font-size: 8pt;
+  color: var(--pr-sub);
+  min-width: 18mm;
+}
+
+.pr-omr-marks {
+  display: flex;
+  gap: 3mm;
+  margin-left: auto;
+}
+
+.pr-omr-mark {
+  width: 5.5mm;
+  height: 5.5mm;
+  border: 1.2px solid var(--pr-line-strong);
+  border-radius: 50%;
+  font-size: 7.5pt;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--pr-sub);
+}
+
+/* --- 정답·해설지 --- */
+.pr-key-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 10pt;
+  margin-bottom: 8mm;
+}
+
+.pr-key-table th,
+.pr-key-table td {
+  border: 1px solid var(--pr-line-strong);
+  padding: 2mm 3mm;
+  text-align: center;
+}
+
+.pr-key-table th {
+  background: #f3f4f6;
+  font-weight: 800;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.pr-key-answer {
+  font-weight: 900;
+  font-size: 11pt;
+}
+
+.pr-exp {
+  break-inside: avoid;
+  page-break-inside: avoid;
+  margin-bottom: 5mm;
+  padding-bottom: 4mm;
+  border-bottom: 1px dashed var(--pr-line);
+}
+
+.pr-exp-head {
+  font-size: 10.5pt;
+  font-weight: 800;
+  margin-bottom: 1.5mm;
+}
+
+.pr-exp-tag {
+  font-size: 8.5pt;
+  font-weight: 700;
+  color: var(--pr-sub);
+  border: 1px solid var(--pr-line);
+  border-radius: 1mm;
+  padding: .3mm 1.5mm;
+  margin-left: 2mm;
+}
+
+.pr-exp-body {
+  font-size: 10pt;
+  line-height: 1.8;
+  color: #1f2937;
+  word-break: keep-all;
+}
+
+/* 구간 제목 (답안지/해설지) */
+.pr-block-title {
+  font-size: 12pt;
+  font-weight: 900;
+  margin: 0 0 4mm;
+  padding-bottom: 2mm;
+  border-bottom: 2px solid var(--pr-line-strong);
+}
+
+/* 지문 구간 꼬리말 */
+.pr-foot {
+  margin-top: 6mm;
+  padding-top: 2mm;
+  border-top: 1px solid var(--pr-line);
+  font-size: 8.5pt;
+  color: var(--pr-sub);
+  display: flex;
+  justify-content: space-between;
+}
+
+/* --- 화면 전용 도구 모음 --- */
+.pr-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: #111827;
+  color: #fff;
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+
+.pr-tab {
+  padding: 7px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  background: rgba(255, 255, 255, .12);
+  color: rgba(255, 255, 255, .7);
+  cursor: pointer;
+  border: none;
+}
+
+.pr-tab.active { background: #fff; color: #111827; }
+
+.pr-print-btn {
+  margin-left: auto;
+  padding: 8px 20px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 800;
+  background: #10b981;
+  color: #fff;
+  border: none;
+  cursor: pointer;
+}
+
+.pr-hint {
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, .55);
+}
+
+/* ============================================================
+   인쇄 시
+   ============================================================ */
+/* .sheet의 화면 padding과 반드시 같은 값이어야 한다 (위 주석 참고) */
+@page {
+  size: A4;
+  margin: 14mm 14mm 12mm;
+}
+
+@media print {
+  /* 앱 전역 요소 숨김 — 인쇄 화면만 남긴다 */
+  body > #root > div > *:not(.print-root) { display: none !important; }
+
+  .no-print,
+  .pr-toolbar { display: none !important; }
+
+  /* 개발 모드의 React Query 개발도구가 출력물에 섞이지 않도록 */
+  .tsqd-parent-container { display: none !important; }
+
+  .print-root {
+    background: #fff !important;
+    padding: 0 !important;
+    min-height: auto !important;
+  }
+
+  /* 화면에서 흰 종이로 보이던 .sheet가 인쇄에서는 실제 한 페이지가 된다 */
+  .sheet {
+    width: auto !important;
+    min-height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    background-image: none !important;  /* 화면용 페이지 경계선 제거 */
+    break-after: page;
+    page-break-after: always;
+  }
+
+  /* 마지막 장 뒤에 빈 페이지가 생기지 않도록 */
+  .sheet:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+
+  a { text-decoration: none; color: inherit; }
+}

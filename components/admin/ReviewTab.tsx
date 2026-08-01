@@ -371,6 +371,16 @@ const SessionCard: React.FC<{
                     <span className="text-sm font-bold text-gray-400">{session.gradeGroup}</span>
                 </div>
                 <div className="flex gap-2">
+                    <a
+                        href={`/print/${session.sessionId}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="px-5 py-2 rounded-xl text-sm font-black bg-navy text-white hover:brightness-125 transition-all flex items-center gap-1.5"
+                        title="문제지 · 답안지 · 정답해설 인쇄"
+                    >
+                        <span className="material-symbols-outlined text-base">print</span>
+                        인쇄
+                    </a>
                     {session.status !== 'APPROVED' && (
                         <button
                             onClick={() => onUpdateStatus('APPROVED')}

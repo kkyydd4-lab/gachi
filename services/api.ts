@@ -1,5 +1,5 @@
 // Firebase 기반 API 서비스
-import { UserAccount, Asset, AdminConfig, GradeGroupType, TestSession, PostTestSurvey, Academy, GradeCurriculumConfig, LearningSession, LearningSessionStatus, ConsultationRequest, OperationManual, TeacherQualityCheck, Writing, WritingAiReview, ReadingLog } from '../types';
+import { UserAccount, Asset, AdminConfig, GradeGroupType, TestSession, Academy, GradeCurriculumConfig, LearningSession, LearningSessionStatus, ConsultationRequest, OperationManual, TeacherQualityCheck, Writing, WritingAiReview, ReadingLog } from '../types';
 import { auth, db } from './firebase';
 import {
   signInWithEmailAndPassword,
@@ -375,36 +375,6 @@ export const ConfigService = {
   }
 };
 
-// --- Cloud Service (하위 호환성 유지) ---
-// 기존 코드와의 호환성을 위해 CloudService도 유지하지만, Firebase 자체가 클라우드이므로 대부분 비활성화
-export const CloudService = {
-  setProvider(type: 'GOOGLE_DRIVE' | 'FIREBASE') {
-
-  },
-
-  getProviderType() {
-    return 'FIREBASE' as const;
-  },
-
-  async connectDrive(): Promise<boolean> {
-    // Firebase는 자동 연결됨
-    return true;
-  },
-
-  async pushToCloud() {
-    // Firebase는 자동 동기화
-  },
-
-  async pullFromCloud() {
-    // Firebase는 자동 동기화
-    return true;
-  },
-
-  isConnected() {
-    return auth.currentUser !== null;
-  }
-};
-
 // --- Session Service (테스트 세션 관리) ---
 // MVP v2: 정교한 데이터 수집을 위한 세션 저장 서비스
 export const SessionService = {
@@ -431,19 +401,6 @@ export const SessionService = {
       return true;
     } catch (error) {
       console.error('[SessionService] 세션 업데이트 실패:', error);
-      return false;
-    }
-  },
-
-  /**
-   * 설문 데이터 추가
-   */
-  async addSurvey(sessionId: string, survey: PostTestSurvey): Promise<boolean> {
-    try {
-      await updateDoc(doc(db, SESSIONS_COLLECTION, sessionId), { survey });
-      return true;
-    } catch (error) {
-      console.error('[SessionService] 설문 저장 실패:', error);
       return false;
     }
   },

@@ -1,11 +1,10 @@
 /**
  * AdminAnalytics Component
- * 
+ *
  * 관리자용 분석 대시보드
  * - 세션 데이터 조회
  * - 문항별 난이도/정답률 통계
  * - 이탈 분석
- * - 설문 피드백 요약
  */
 
 import React, { useState, useEffect } from 'react';
@@ -24,12 +23,6 @@ interface AnalyticsSummary {
     avgScore: number;
     avgDuration: number;
     categoryStats: Record<string, { avgRate: number; totalQuestions: number }>;
-    difficultyFeedback: { easy: number; medium: number; hard: number };
-    surveyStats: {
-        avgDifficulty: number;
-        recommendRate: number;
-        needsGuidanceCount: number;
-    };
     isDataSufficient: boolean; // 데이터 충분 여부
     totalQuestionLogs: number; // 전체 문항 로그 수
 }
@@ -42,7 +35,7 @@ const AdminAnalytics: React.FC<AdminAnalyticsProps> = ({ isVisible }) => {
     const [sessions, setSessions] = useState<TestSession[]>([]);
     const [loading, setLoading] = useState(true);
     const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
-    const [selectedTab, setSelectedTab] = useState<'overview' | 'questions' | 'dropoff' | 'feedback'>('overview');
+    const [selectedTab, setSelectedTab] = useState<'overview' | 'questions' | 'dropoff'>('overview');
 
     // 세션 데이터 로드
     useEffect(() => {
@@ -96,28 +89,6 @@ const AdminAnalytics: React.FC<AdminAnalyticsProps> = ({ isVisible }) => {
             });
         });
 
-        // 난이도 피드백 분포
-        let easyCount = 0, mediumCount = 0, hardCount = 0;
-        data.forEach(session => {
-            session.questionLogs?.forEach(log => {
-                if (log.difficultyFeedback) {
-                    if (log.difficultyFeedback <= 2) easyCount++;
-                    else if (log.difficultyFeedback === 3) mediumCount++;
-                    else hardCount++;
-                }
-            });
-        });
-
-        // 설문 통계
-        const sessionsWithSurvey = data.filter(s => s.survey);
-        const avgDifficulty = sessionsWithSurvey.length > 0
-            ? sessionsWithSurvey.reduce((sum, s) => sum + (s.survey?.overallDifficulty || 0), 0) / sessionsWithSurvey.length
-            : 0;
-        const recommendRate = sessionsWithSurvey.length > 0
-            ? sessionsWithSurvey.reduce((sum, s) => sum + (s.survey?.wouldRecommend || 0), 0) / sessionsWithSurvey.length
-            : 0;
-        const needsGuidanceCount = sessionsWithSurvey.filter(s => s.survey?.needsGuidance).length;
-
         setSummary({
             totalSessions: data.length,
             completedSessions: completed.length,
@@ -134,12 +105,6 @@ const AdminAnalytics: React.FC<AdminAnalyticsProps> = ({ isVisible }) => {
                     { avgRate: Math.round(stats.totalRate / stats.count), totalQuestions: stats.count }
                 ])
             ),
-            difficultyFeedback: { easy: easyCount, medium: mediumCount, hard: hardCount },
-            surveyStats: {
-                avgDifficulty: Math.round(avgDifficulty * 10) / 10,
-                recommendRate: Math.round(recommendRate * 10) / 10,
-                needsGuidanceCount
-            },
             isDataSufficient,
             totalQuestionLogs
         });
@@ -193,8 +158,7 @@ const AdminAnalytics: React.FC<AdminAnalyticsProps> = ({ isVisible }) => {
                 {[
                     { id: 'overview' as const, label: '개요', icon: 'dashboard' },
                     { id: 'questions' as const, label: '문항 분석', icon: 'quiz' },
-                    { id: 'dropoff' as const, label: '이탈 분석', icon: 'exit_to_app' },
-                    { id: 'feedback' as const, label: '피드백', icon: 'rate_review' }
+                    { id: 'dropoff' as const, label: '이탈 분석', icon: 'exit_to_app' }
                 ].map(tab => (
                     <button
                         key={tab.id}
@@ -262,30 +226,6 @@ const AdminAnalytics: React.FC<AdminAnalyticsProps> = ({ isVisible }) => {
             {/* 문항 분석 탭 */}
             {selectedTab === 'questions' && summary && (
                 <div className="space-y-6">
-                    <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm">
-                        <h3 className="text-lg font-black text-navy mb-6 flex items-center gap-2">
-                            <span className="material-symbols-outlined text-secondary">analytics</span>
-                            난이도 피드백 분포
-                        </h3>
-                        <div className="grid grid-cols-3 gap-6">
-                            <div className="text-center p-6 bg-primary/5 rounded-2xl">
-                                <p className="text-4xl mb-2">😊</p>
-                                <p className="text-2xl font-black text-primary">{summary.difficultyFeedback.easy}</p>
-                                <p className="text-sm text-gray-500 font-bold">쉬움</p>
-                            </div>
-                            <div className="text-center p-6 bg-gray-50 rounded-2xl">
-                                <p className="text-4xl mb-2">😐</p>
-                                <p className="text-2xl font-black text-navy">{summary.difficultyFeedback.medium}</p>
-                                <p className="text-sm text-gray-500 font-bold">보통</p>
-                            </div>
-                            <div className="text-center p-6 bg-secondary/5 rounded-2xl">
-                                <p className="text-4xl mb-2">😰</p>
-                                <p className="text-2xl font-black text-secondary">{summary.difficultyFeedback.hard}</p>
-                                <p className="text-sm text-gray-500 font-bold">어려움</p>
-                            </div>
-                        </div>
-                    </div>
-
                     {/* 문항별 정답/오답 분석 */}
                     <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm">
                         <h3 className="text-lg font-black text-navy mb-6 flex items-center gap-2">
@@ -420,53 +360,6 @@ const AdminAnalytics: React.FC<AdminAnalyticsProps> = ({ isVisible }) => {
                                 </div>
                             ))
                         )}
-                    </div>
-                </div>
-            )}
-
-            {/* 피드백 탭 */}
-            {selectedTab === 'feedback' && summary && (
-                <div className="space-y-6">
-                    <div className="grid grid-cols-3 gap-4">
-                        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm text-center">
-                            <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mb-2">평균 난이도</p>
-                            <p className="text-3xl font-black text-navy">{summary.surveyStats.avgDifficulty}/5</p>
-                        </div>
-                        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm text-center">
-                            <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mb-2">추천 의향 (NPS)</p>
-                            <p className="text-3xl font-black text-primary">{summary.surveyStats.recommendRate}/5</p>
-                        </div>
-                        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm text-center">
-                            <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mb-2">학습 가이드 요청</p>
-                            <p className="text-3xl font-black text-secondary">{summary.surveyStats.needsGuidanceCount}명</p>
-                        </div>
-                    </div>
-
-                    <div className="bg-gradient-to-br from-secondary/10 to-primary/10 p-8 rounded-3xl border border-gray-100">
-                        <h4 className="font-black text-navy mb-4 flex items-center gap-2">
-                            <span className="material-symbols-outlined text-secondary">lightbulb</span>
-                            비즈니스 인사이트
-                        </h4>
-                        <ul className="space-y-3 text-sm text-gray-700">
-                            {summary.surveyStats.needsGuidanceCount > 0 && (
-                                <li className="flex items-start gap-2">
-                                    <span className="text-primary">→</span>
-                                    <span><strong>{summary.surveyStats.needsGuidanceCount}명</strong>이 학습 방향 추천을 원합니다. 상담 전환 대상!</span>
-                                </li>
-                            )}
-                            {summary.surveyStats.avgDifficulty >= 4 && (
-                                <li className="flex items-start gap-2">
-                                    <span className="text-secondary">→</span>
-                                    <span>평균 난이도가 높습니다. 문항 난이도 조정을 검토하세요.</span>
-                                </li>
-                            )}
-                            {summary.surveyStats.recommendRate >= 4 && (
-                                <li className="flex items-start gap-2">
-                                    <span className="text-primary">→</span>
-                                    <span>추천 의향이 높습니다! 바이럴 마케팅에 활용하세요.</span>
-                                </li>
-                            )}
-                        </ul>
                     </div>
                 </div>
             )}

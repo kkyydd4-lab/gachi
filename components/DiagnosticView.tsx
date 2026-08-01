@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { generateContent } from '../services/gemini';
-import { UserAccount, DiagnosticPassage, AdminConfig, GradeGroupType, Asset, TestSession, QuestionLog, AgentStatus, BlueprintDebugInfo, WrongAnswerRecord, LearningSession } from '../types';
-import { AssetService, ConfigService, CurriculumService, LearningSessionService, SessionService } from '../services/api';
+import { UserAccount, DiagnosticPassage, GradeGroupType, Asset, TestSession, AgentStatus, BlueprintDebugInfo, WrongAnswerRecord } from '../types';
+import { AssetService, LearningSessionService, SessionService } from '../services/api';
 import * as Analytics from '../services/analytics';
-import { FeedbackButtons } from './MicroSurvey';
 
 // Sub-components
 import DiagnosticLoading from './diagnostic/DiagnosticLoading';

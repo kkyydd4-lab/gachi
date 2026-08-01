@@ -19,7 +19,7 @@ import {
     query,
     where
 } from 'firebase/firestore';
-import { TestSession, QuestionLog, PostTestSurvey } from '../types';
+import { TestSession, QuestionLog } from '../types';
 
 // 컬렉션 참조
 const SESSIONS_COLLECTION = 'test_sessions';
@@ -151,8 +151,7 @@ export const logQuestionAnswer = (
     category: string,
     userChoice: number | null,
     correctAnswer: number,
-    timeSpent: number,
-    difficultyFeedback?: 1 | 2 | 3 | 4 | 5
+    timeSpent: number
 ): TestSession => {
     const isCorrect = userChoice === correctAnswer;
 
@@ -162,8 +161,7 @@ export const logQuestionAnswer = (
         userChoice,
         isCorrect,
         timeSpent,
-        timestamp: new Date().toISOString(),
-        difficultyFeedback
+        timestamp: new Date().toISOString()
     };
 
     // 기존 로그 업데이트 또는 추가
@@ -284,25 +282,6 @@ export const saveSessionToFirebase = async (session: TestSession): Promise<boole
 };
 
 /**
- * 설문 데이터 업데이트
- */
-export const updateSurvey = async (
-    sessionId: string,
-    survey: PostTestSurvey
-): Promise<boolean> => {
-    const result = await saveWithRetry(
-        async () => {
-            await updateDoc(doc(db, SESSIONS_COLLECTION, sessionId), { survey });
-            return true;
-        },
-        `pending_survey_${sessionId}`,
-        { sessionId, survey }
-    );
-
-    return result !== null;
-};
-
-/**
  * 유저의 세션 히스토리 조회
  */
 export const getSessionsByUser = async (userId: string): Promise<TestSession[]> => {
@@ -345,43 +324,6 @@ export const retryPendingSessions = async (): Promise<void> => {
 // ========================================
 
 /**
- * 설문 + 성적 데이터 매핑 분석
- * 예: "70점 맞은 학생이 '너무 어렵다'고 답변"
- */
-export const mapSurveyToPerformance = (session: TestSession): {
-    score: number;
-    perceivedDifficulty: number | null;
-    difficultyGap: number | null;  // 양수: 실제보다 어렵게 느낌, 음수: 실제보다 쉽게 느낌
-    wouldRecommend: number | null;
-    needsGuidance: boolean;
-} => {
-    const score = session.summary.totalScore;
-    const survey = session.survey;
-
-    if (!survey) {
-        return {
-            score,
-            perceivedDifficulty: null,
-            difficultyGap: null,
-            wouldRecommend: null,
-            needsGuidance: false
-        };
-    }
-
-    // 점수를 난이도 척도로 변환 (100점 = 1, 0점 = 5)
-    const expectedDifficulty = 5 - (score / 25);  // 0-100 -> 5-1
-    const difficultyGap = survey.overallDifficulty - expectedDifficulty;
-
-    return {
-        score,
-        perceivedDifficulty: survey.overallDifficulty,
-        difficultyGap: Math.round(difficultyGap * 10) / 10,
-        wouldRecommend: survey.wouldRecommend,
-        needsGuidance: survey.needsGuidance || false
-    };
-};
-
-/**
  * 문항별 평균 소요 시간 분석
  */
 export const analyzeTimeByQuestion = (
@@ -409,9 +351,7 @@ export default {
     calculateCategoryScores,
     calculateSessionSummary,
     saveSessionToFirebase,
-    updateSurvey,
     getSessionsByUser,
     getTrafficSource,
-    mapSurveyToPerformance,
     analyzeTimeByQuestion
 };

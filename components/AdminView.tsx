@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AdminConfig, UserAccount, GradeGroupType, Asset, Academy } from '../types';
-import { AssetService, ConfigService, AuthService, CloudService, AcademyService, CurriculumService } from '../services/api';
+import { AssetService, CurriculumService } from '../services/api';
 import { generateContent } from '../services/gemini';
 import { useConfig, useUsers, useAssets, useAcademies, useUpdateAssetStatus, useUpdateAsset, useDeleteUser, useUpdateUser, useCreateAcademy, useSaveConfig, useLearningSessions, useUpdateLearningSessionStatus, useDeleteLearningSession, useConsultationRequests, useManuals, useSaveManual, useDeleteManual, useQualityChecks, useSaveQualityCheck } from '../hooks/useQueries';
 import AdminAnalytics from './AdminAnalytics';
@@ -74,15 +74,7 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack, adminName = '관리자' }
   const [newAcademyName, setNewAcademyName] = useState('');
   const [newAcademyRegion, setNewAcademyRegion] = useState('');
 
-  // Cloud Sync State
-  const [isDriveConnected, setIsDriveConnected] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
-  const [cloudProvider, setCloudProvider] = useState<'GOOGLE_DRIVE' | 'FIREBASE'>('GOOGLE_DRIVE');
-
-  // Settings Inputs
-  const [inputClientId, setInputClientId] = useState('');
-  const [inputApiKey, setInputApiKey] = useState('');
 
   // Prompt Tuning State
   const [currentPromptText, setCurrentPromptText] = useState('');
@@ -116,12 +108,6 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack, adminName = '관리자' }
     setCurrentPromptText(template);
   }, [config.gradeGroup, config.promptTemplates]);
 
-  // Initialize Cloud Settings
-  useEffect(() => {
-    setIsDriveConnected(CloudService.isConnected());
-    setCloudProvider(CloudService.getProviderType());
-  }, []);
-
   const handleDeleteUser = async (user: UserAccount) => {
     if (!user.uid) return;
     if (confirm(`'${user.name}' 사용자를 정말 삭제하시겠습니까?`)) {
@@ -146,29 +132,6 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack, adminName = '관리자' }
   const openEditModal = (user: UserAccount) => {
     setEditingUser(user);
     setIsEditModalOpen(true);
-  };
-
-  const handleDriveConnect = async () => {
-    setIsSyncing(true);
-    const success = await CloudService.connectDrive();
-    setIsSyncing(false);
-    if (success) {
-      setIsDriveConnected(true);
-      const providerName = cloudProvider === 'FIREBASE' ? 'Firebase' : '구글 드라이브';
-      alert(`${providerName}와 성공적으로 연결되었습니다.\n데이터가 동기화됩니다.`);
-      // Refresh all data
-      refetchUsers();
-      refetchAssets();
-    } else {
-      if (cloudProvider === 'GOOGLE_DRIVE' && confirm("연결에 실패했습니다. 설정에서 Client ID를 확인하시겠습니까?")) {
-        setShowSettingsModal(true);
-      }
-    }
-  };
-
-  const handleSaveSettings = () => {
-    CloudService.setProvider(cloudProvider);
-    alert('설정이 저장되었습니다.');
   };
 
   const getDefaultPrompt = (grade: GradeGroupType) => {
@@ -284,10 +247,6 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack, adminName = '관리자' }
     <div className="flex flex-col min-h-screen bg-[#F1F5F9] font-display">
       <AdminHeader
         onBack={onBack}
-        isDriveConnected={isDriveConnected}
-        cloudProvider={cloudProvider}
-        isSyncing={isSyncing}
-        handleDriveConnect={handleDriveConnect}
         setShowSettingsModal={setShowSettingsModal}
         tab={tab}
         setTab={setTab}

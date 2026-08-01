@@ -31,19 +31,17 @@ vi.mock('../hooks/useContentGenerator', () => ({
     }),
 }));
 
-// Mock Gemini (needed because useSessionGenerator imports it potentially or indirectly? 
-// No, useSessionGenerator uses useContentGenerator. 
-// However, the previous error showed useContentGenerator importing gemini. So we might still need to mock gemini if we were testing useContentGenerator.
-// But here we are mocking useContentGenerator directly. So we might not need to mock gemini explicitly if we mock the hook.
-// Let's keep gemini mock just in case for deep imports, but perform minimal mock.
-import { SchemaType } from "@google/generative-ai";
+// services/gemini을 얕게 모킹 (깊은 import 체인에서 fetch가 실행되는 것 방지)
 vi.mock('../services/gemini', async () => {
     return {
         default: {
             generateContent: vi.fn(),
         },
         generateContent: vi.fn(),
-        Type: SchemaType,
+        Type: {
+            STRING: 'string', NUMBER: 'number', INTEGER: 'integer',
+            BOOLEAN: 'boolean', ARRAY: 'array', OBJECT: 'object',
+        },
     };
 });
 

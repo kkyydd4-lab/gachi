@@ -2,10 +2,6 @@ import React from 'react';
 
 interface AdminHeaderProps {
     onBack: () => void;
-    isDriveConnected: boolean;
-    cloudProvider: 'GOOGLE_DRIVE' | 'FIREBASE';
-    isSyncing: boolean;
-    handleDriveConnect: () => void;
     setShowSettingsModal: (show: boolean) => void;
     tab: string;
     setTab: (tab: any) => void;
@@ -13,10 +9,6 @@ interface AdminHeaderProps {
 
 const AdminHeader: React.FC<AdminHeaderProps> = ({
     onBack,
-    isDriveConnected,
-    cloudProvider,
-    isSyncing,
-    handleDriveConnect,
     setShowSettingsModal,
     tab,
     setTab
@@ -31,25 +23,7 @@ const AdminHeader: React.FC<AdminHeaderProps> = ({
                         </button>
                         <div>
                             <h1 className="text-xl font-black tracking-tight">문해력 출제 관리자</h1>
-                            <div className="flex items-center gap-2">
-                                <p className="text-white/50 text-[10px] font-bold uppercase tracking-widest">Unified Curriculum Editor</p>
-                                <span className="text-white/20">|</span>
-                                {isDriveConnected ? (
-                                    <span className="flex items-center gap-1 text-[10px] font-bold text-green-400 bg-green-400/10 px-2 py-0.5 rounded-full">
-                                        <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span>
-                                        {cloudProvider === 'GOOGLE_DRIVE' ? 'Drive Sync On' : 'Firebase On'}
-                                    </span>
-                                ) : (
-                                    <button
-                                        onClick={handleDriveConnect}
-                                        disabled={isSyncing}
-                                        className="flex items-center gap-1 text-[10px] font-bold text-gray-400 hover:text-white bg-white/10 px-2 py-0.5 rounded-full hover:bg-white/20 transition-all"
-                                    >
-                                        <span className="material-symbols-outlined text-xs">cloud_off</span>
-                                        {isSyncing ? 'Connecting...' : `Connect ${cloudProvider === 'GOOGLE_DRIVE' ? 'Drive' : 'Firebase'}`}
-                                    </button>
-                                )}
-                            </div>
+                            <p className="text-white/50 text-[10px] font-bold uppercase tracking-widest">Unified Curriculum Editor</p>
                         </div>
                     </div>
                     <button onClick={() => setShowSettingsModal(true)} className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-all">

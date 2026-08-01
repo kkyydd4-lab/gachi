@@ -30,3 +30,19 @@ dist-ssr
 *.sw?
 
 .vercel
+
+.env*
+
+# Build artifacts
+tsconfig.tsbuildinfo
+
+# 로컬 작업 파일 (일회성 추출 문서 등)
+*.docx
+
+# 스크립트 실행 산출물 (scripts/audit-assets.mjs, scripts/repair-answers.mjs)
+backup-assets-*.json
+repair-answers-log.json
+
+# 에이전트/도구 로컬 설정
+.agents/
+.claude/

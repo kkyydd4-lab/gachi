@@ -1,7 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { ViewState, UserAccount, WrongAnswerRecord, PostTestSurvey, Writing, ReadingLog } from '../types';
-import { SessionService, ConsultationService, AuthService, WritingService, ReadingLogService } from '../services/api';
-import { PostTestSurveyForm } from './MicroSurvey';
+import { ViewState, UserAccount, WrongAnswerRecord, Writing, ReadingLog } from '../types';
+import { ConsultationService, AuthService, WritingService, ReadingLogService } from '../services/api';
 import { getGradeSegment } from '../data/gradeSegments';
 import {
   Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
@@ -47,21 +46,6 @@ const ReportView: React.FC<ReportViewProps> = ({ user, onLogout, onStartTest, on
     setConsultState(ok ? 'submitted' : 'error');
   };
 
-  // MVP v2: 설문 상태 관리
-  // 방금 마친 테스트 세션이 있고, 그 세션에 대해 아직 제출/스킵하지 않았을 때만 노출
-  // (이전에는 초기값이 항상 true라 리포트를 열 때마다 설문이 반복해서 떴음)
-  const lastSessionId = typeof window !== 'undefined' ? sessionStorage.getItem('last_session_id') : null;
-  const surveyDoneKey = lastSessionId ? `survey_done_${lastSessionId}` : null;
-  const [showSurvey, setShowSurvey] = useState(() =>
-    !isTeacherView && !!surveyDoneKey && localStorage.getItem(surveyDoneKey) !== '1'
-  );
-  const [surveySubmitted, setSurveySubmitted] = useState(false);
-
-  const markSurveyDone = () => {
-    if (surveyDoneKey) localStorage.setItem(surveyDoneKey, '1');
-    setShowSurvey(false);
-  };
-
   // 오답 복습 모드
   const [retryMode, setRetryMode] = useState(false);
   const [retryAnswers, setRetryAnswers] = useState<Record<number, number>>({});
@@ -84,15 +68,6 @@ const ReportView: React.FC<ReportViewProps> = ({ user, onLogout, onStartTest, on
     setRetryAnswers({});
     setRetryRevealed(new Set());
   }, []);
-
-  // 설문 제출 핸들러
-  const handleSurveySubmit = async (survey: PostTestSurvey) => {
-    if (lastSessionId) {
-      await SessionService.addSurvey(lastSessionId, survey);
-    }
-    setSurveySubmitted(true);
-    markSurveyDone();
-  };
 
   const displayCompetencies = user?.testResult?.competencies || [
     { label: '어휘력', score: 0, average: 60, correct: 0, total: 0 },
@@ -977,23 +952,6 @@ const ReportView: React.FC<ReportViewProps> = ({ user, onLogout, onStartTest, on
               </div>
             </div>
 
-            {/* MVP v2: 테스트 종료 후 설문 */}
-            {hasResult && showSurvey && !surveySubmitted && (
-              <PostTestSurveyForm
-                isVisible={showSurvey}
-                onSubmit={handleSurveySubmit}
-                onSkip={markSurveyDone}
-              />
-            )}
-
-            {/* 설문 완료 감사 메시지 */}
-            {surveySubmitted && (
-              <div className="bg-primary/5 rounded-3xl p-8 text-center border border-primary/20 mt-10">
-                <span className="material-symbols-outlined text-primary text-4xl mb-4 block">check_circle</span>
-                <p className="text-navy font-bold">피드백 감사합니다!</p>
-                <p className="text-gray-400 text-sm mt-2">더 나은 서비스를 만드는 데 큰 도움이 됩니다.</p>
-              </div>
-            )}
           </div>
         )}
       </main>

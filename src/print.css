@@ -68,8 +68,12 @@
 /* ⚠️ flow-root 필수.
    감싸는 요소의 높이에는 자식의 바깥 여백(margin)이 포함되지 않는다.
    문항마다 margin-bottom이 있으므로 이걸 빼먹으면 측정값이 실제보다 작아지고,
-   쪽 나눔이 어긋나 내용이 페이지 밖으로 잘린다. */
-.pr-measure [data-block] { display: flow-root; }
+   쪽 나눔이 어긋나 내용이 페이지 밖으로 잘린다.
+
+   실제 쪽(.pr-block)도 같은 이유로 flow-root여야 한다 —
+   측정값과 실제 배치가 어긋나지 않도록 둘의 조건을 같게 맞춘다. */
+.pr-measure [data-block],
+.pr-block { display: flow-root; }
 
 .pr-warn {
   max-width: 210mm;

@@ -12,6 +12,10 @@ const CIRCLED = ['①', '②', '③', '④', '⑤'] as const;
 // A4 기준 치수 (mm). .sheet 의 padding, @page margin과 반드시 일치해야 한다.
 const COL_HEIGHT_MM = 297 - 14 - 12;
 
+// 남는 공간을 블록 사이에 나눠 넣을 때의 한 칸 최대치.
+// 무제한으로 벌리면 문항이 페이지 전체에 흩뿌려져 오히려 읽기 나빠진다.
+const MAX_EXTRA_GAP_MM = 14;
+
 const GRADE_TIME_LIMITS: Record<GradeGroupType, number> = {
     '초등 저학년': 20,
     '초등 중학년': 25,
@@ -105,7 +109,10 @@ const QuestionBlock: React.FC<{ q: NumberedQuestion }> = ({ q }) => {
 /**
  * 측정된 블록 높이를 바탕으로 쪽에 채워 넣는다.
  * 바깥 배열의 각 묶음은 새 쪽에서 시작한다.
- * 반환값: pages[쪽] = 블록 key 목록
+ *
+ * 앞쪽부터 꽉 채우면 마지막 쪽이 텅 비어 보이므로,
+ * 묶음이 몇 쪽을 쓸지 먼저 계산한 뒤 그 쪽수에 고르게 나눠 담는다.
+ * (예: 355mm짜리 지문 → 2쪽 필요 → 한 쪽에 약 178mm씩)
  */
 function paginate(
     groups: Block[][],
@@ -115,17 +122,34 @@ function paginate(
     const pages: string[][] = [];
 
     for (const blocks of groups) {
+        const hs = blocks.map(b => heights.get(b.key) ?? 0);
+        const total = hs.reduce((a, b) => a + b, 0);
+        const pageCount = Math.max(1, Math.ceil(total / pageHeight));
+        const target = total / pageCount;
+
         let page: string[] = [];
         let used = 0;
+        let madePages = 1;
 
-        for (const b of blocks) {
-            const h = heights.get(b.key) ?? 0;
-            if (used > 0 && used + h > pageHeight) {
+        for (let i = 0; i < blocks.length; i++) {
+            const h = hs[i];
+            const rest = hs.slice(i).reduce((a, b) => a + b, 0);
+            const pagesLeft = pageCount - madePages;
+
+            // 실제로 안 들어가는 경우
+            const mustBreak = used > 0 && used + h > pageHeight;
+            // 목표치를 넘었고, 남은 내용이 남은 쪽에 충분히 들어가는 경우
+            const wantBreak = used > 0 && pagesLeft > 0
+                && used + h > target
+                && rest <= pagesLeft * pageHeight;
+
+            if (mustBreak || wantBreak) {
                 pages.push(page);
                 page = [];
                 used = 0;
+                madePages += 1;
             }
-            page.push(b.key);
+            page.push(blocks[i].key);
             used += h;
         }
         pages.push(page);
@@ -467,15 +491,29 @@ const PrintView: React.FC<PrintViewProps> = ({ sessionIdProp }) => {
                 </div>
             )}
 
-            {/* 실제 쪽 */}
-            {pages?.map((page, pi) => (
-                <div className="sheet" key={pi}>
-                    {page.map(k => (
-                        <React.Fragment key={k}>{nodeByKey.get(k)}</React.Fragment>
-                    ))}
-                    <div className="pr-page-no">{pi + 1} / {pages.length}</div>
-                </div>
-            ))}
+            {/* 실제 쪽 — 남는 공간은 블록 사이에 나눠 넣어 아래가 텅 비지 않게 한다 */}
+            {pages?.map((page, pi) => {
+                const used = page.reduce((s, k) => s + (heights?.get(k) ?? 0), 0);
+                const gaps = Math.max(0, page.length - 1);
+                const extra = gaps > 0
+                    ? Math.max(0, Math.min((COL_HEIGHT_MM - used) / gaps, MAX_EXTRA_GAP_MM))
+                    : 0;
+
+                return (
+                    <div className="sheet" key={pi}>
+                        {page.map((k, bi) => (
+                            <div
+                                className="pr-block"
+                                key={k}
+                                style={bi < gaps ? { marginBottom: `${extra.toFixed(2)}mm` } : undefined}
+                            >
+                                {nodeByKey.get(k)}
+                            </div>
+                        ))}
+                        <div className="pr-page-no">{pi + 1} / {pages.length}</div>
+                    </div>
+                );
+            })}
         </div>
     );
 };

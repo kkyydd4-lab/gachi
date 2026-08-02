@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Asset, GradeGroupType, LearningSession, Question } from '../../types';
 import { AssetService, LearningSessionService } from '../../services/api';
 import { SAMPLE_ASSETS, SAMPLE_SESSION } from './sampleData';
@@ -179,7 +179,12 @@ const PrintView: React.FC<PrintViewProps> = ({ sessionIdProp }) => {
     const sessionId = sessionIdProp ?? paramSessionId;
     const navigate = useNavigate();
 
-    const [mode, setMode] = useState<PrintMode>('paper');
+    // ?mode=paper|answer|key — 링크로 특정 문서를 바로 열거나 일괄 인쇄할 때 쓴다
+    const [searchParams] = useSearchParams();
+    const initialMode = (['paper', 'answer', 'key'] as const)
+        .find(m => m === searchParams.get('mode')) ?? 'paper';
+
+    const [mode, setMode] = useState<PrintMode>(initialMode);
     const [session, setSession] = useState<LearningSession | null>(null);
     const [assets, setAssets] = useState<Asset[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -200,8 +205,13 @@ const PrintView: React.FC<PrintViewProps> = ({ sessionIdProp }) => {
             setError('');
 
             if (sessionId === 'sample') {
-                setSession(SAMPLE_SESSION);
-                setAssets(SAMPLE_ASSETS);
+                // 외부 도구(scripts/export-pdf.mjs)가 window.__PRINT_DATA__ 로 내용을 주입할 수 있다.
+                // 파일을 고쳐 넣는 방식은 개발 서버 재컴파일과 겹쳐 화면이 비는 일이 있어 이렇게 바꿨다.
+                const injected = (window as unknown as {
+                    __PRINT_DATA__?: { session: LearningSession; assets: Asset[] };
+                }).__PRINT_DATA__;
+                setSession(injected?.session ?? SAMPLE_SESSION);
+                setAssets(injected?.assets ?? SAMPLE_ASSETS);
                 setIsLoading(false);
                 return;
             }

@@ -46,3 +46,8 @@ repair-answers-log.json
 # 에이전트/도구 로컬 설정
 .agents/
 .claude/
+
+# PDF 생성 산출물 (scripts/export-pdf.mjs)
+pdf/
+.chrome-pdf-profile/
+.chrome-t/

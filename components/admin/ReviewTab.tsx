@@ -1,6 +1,15 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { renderPassageContent } from '../../utils/renderPassageContent';
-import { Asset, AdminConfig, LearningSession, LearningSessionStatus } from '../../types';
+import { Asset, AdminConfig, GradeGroupType, LearningSession, LearningSessionStatus } from '../../types';
+
+// 차시 목록 표시 순서 (학년군 → 차시 번호)
+const GRADE_ORDER: GradeGroupType[] = ['초등 저학년', '초등 중학년', '초등 고학년', '중등'];
+
+// "초등 중학년 3차시" → 3. 번호가 없으면 맨 뒤로 보낸다.
+const sessionNo = (title: string): number => {
+    const m = /(\d+)\s*차시/.exec(title || '');
+    return m ? parseInt(m[1], 10) : Number.MAX_SAFE_INTEGER;
+};
 
 interface ReviewTabProps {
     config: AdminConfig;
@@ -30,6 +39,41 @@ const ReviewTab: React.FC<ReviewTabProps> = ({
     updateAsset
 }) => {
     const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
+    const [gradeFilter, setGradeFilter] = useState<'ALL' | GradeGroupType>('ALL');
+
+    const matchesStatus = (s: LearningSession) =>
+        filterStatus === 'ALL' ||
+        (filterStatus === 'CANDIDATE' && s.status === 'DRAFT') ||
+        (filterStatus === 'APPROVED' && s.status === 'APPROVED') ||
+        (filterStatus === 'REJECTED' && s.status === 'ARCHIVED');
+
+    // 학년군별로 묶고, 각 묶음 안에서는 1차시부터 정렬
+    const sessionGroups = useMemo(() => {
+        return GRADE_ORDER
+            .filter(grade => gradeFilter === 'ALL' || gradeFilter === grade)
+            .map(grade => {
+                const all = learningSessions.filter(s => s.gradeGroup === grade);
+                const visible = all
+                    .filter(matchesStatus)
+                    .sort((a, b) =>
+                        sessionNo(a.title) - sessionNo(b.title) ||
+                        String(a.createdAt).localeCompare(String(b.createdAt))
+                    );
+                return {
+                    grade,
+                    visible,
+                    counts: {
+                        total: all.length,
+                        approved: all.filter(s => s.status === 'APPROVED').length,
+                        draft: all.filter(s => s.status === 'DRAFT').length,
+                        archived: all.filter(s => s.status === 'ARCHIVED').length,
+                    },
+                };
+            })
+            .filter(g => g.counts.total > 0);
+    }, [learningSessions, filterStatus, gradeFilter]);
+
+    const visibleTotal = sessionGroups.reduce((n, g) => n + g.visible.length, 0);
 
     // Helper: Bulk update session and its assets
     const handleSessionStatusChange = (session: LearningSession, status: LearningSessionStatus) => {
@@ -68,19 +112,33 @@ const ReviewTab: React.FC<ReviewTabProps> = ({
                 </div>
             </div>
 
-            {/* 학년별 필터링 정보 및 반려함 관리 */}
-            <div className="flex justify-between items-center px-4">
-                <div className="flex items-center gap-2 text-xs text-gray-500 font-bold">
-                    <span className="material-symbols-outlined text-sm">filter_list</span>
-                    {filterStatus === 'REJECTED' ? '반려 문항 보관함' : '문항 리스트'}
-                    <span className="text-gray-300">|</span>
-                    전체 {filteredAssets.length}개
+            {/* 학년군 필터 + 반려함 관리 */}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 px-4">
+                <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                        onClick={() => setGradeFilter('ALL')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all border ${gradeFilter === 'ALL' ? 'bg-navy text-white border-navy' : 'bg-white text-gray-400 border-gray-200 hover:text-navy'}`}
+                    >
+                        전체 학년
+                    </button>
+                    {GRADE_ORDER.map(grade => (
+                        <button
+                            key={grade}
+                            onClick={() => setGradeFilter(grade)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all border ${gradeFilter === grade ? 'bg-navy text-white border-navy' : 'bg-white text-gray-400 border-gray-200 hover:text-navy'}`}
+                        >
+                            {grade}
+                        </button>
+                    ))}
+                    <span className="text-xs text-gray-400 font-bold ml-2">
+                        차시 {visibleTotal}개
+                    </span>
                 </div>
 
                 {filterStatus === 'REJECTED' && filteredAssets.length > 0 && (
                     <button
                         onClick={bulkDeleteRejected}
-                        className="flex items-center gap-1 text-xs font-bold text-red-500 hover:bg-red-50 px-3 py-1.5 rounded-lg border border-red-200 transition-colors"
+                        className="flex items-center gap-1 text-xs font-bold text-red-500 hover:bg-red-50 px-3 py-1.5 rounded-lg border border-red-200 transition-colors shrink-0"
                     >
                         <span className="material-symbols-outlined text-sm">delete_forever</span>
                         반려 문항 전체 삭제
@@ -88,32 +146,45 @@ const ReviewTab: React.FC<ReviewTabProps> = ({
                 )}
             </div>
 
-            <div className="grid grid-cols-1 gap-6">
-                {learningSessions
-                    .filter(s => filterStatus === 'ALL' || (filterStatus === 'CANDIDATE' && s.status === 'DRAFT') || (filterStatus === 'APPROVED' && s.status === 'APPROVED') || (filterStatus === 'REJECTED' && s.status === 'ARCHIVED'))
-                    .length === 0 ? (
-                    <div className="text-center py-20 text-gray-300 font-bold">
-                        {filterStatus === 'CANDIDATE' ? '검토 대기 중인 차시가 없습니다.' : '해당 조건의 차시가 없습니다.'}
-                    </div>
-                ) : (
-                    learningSessions
-                        .filter(s => filterStatus === 'ALL' || (filterStatus === 'CANDIDATE' && s.status === 'DRAFT') || (filterStatus === 'APPROVED' && s.status === 'APPROVED') || (filterStatus === 'REJECTED' && s.status === 'ARCHIVED'))
-                        .map(session => (
-                            <SessionCard
-                                key={session.sessionId}
-                                session={session}
-                                assets={getSessionAssets(session)}
-                                onUpdateStatus={(status) => handleSessionStatusChange(session, status)}
-                                onDeleteSession={() => {
-                                    if (confirm('이 차시를 영구 삭제하시겠습니까? 소속된 모든 지문도 함께 삭제됩니다.')) {
-                                        deleteLearningSession(session.sessionId);
-                                    }
-                                }}
-                                onOpenAssetDetail={setSelectedAsset}
-                            />
-                        ))
-                )}
-            </div>
+            {visibleTotal === 0 ? (
+                <div className="text-center py-20 text-gray-300 font-bold">
+                    {filterStatus === 'CANDIDATE' ? '검토 대기 중인 차시가 없습니다.' : '해당 조건의 차시가 없습니다.'}
+                </div>
+            ) : (
+                sessionGroups.filter(g => g.visible.length > 0).map(group => (
+                    <section key={group.grade}>
+                        {/* 학년군 구분 헤더 */}
+                        <div className="flex items-center gap-3 px-4 mb-4">
+                            <h4 className="text-lg font-black text-navy">{group.grade}</h4>
+                            <span className="text-xs font-bold text-gray-400">
+                                차시 {group.counts.total}개
+                                <span className="mx-1.5 text-gray-200">|</span>
+                                승인 {group.counts.approved}
+                                {group.counts.draft > 0 && <> · 대기 <b className="text-amber-500">{group.counts.draft}</b></>}
+                                {group.counts.archived > 0 && <> · 반려 <b className="text-red-400">{group.counts.archived}</b></>}
+                            </span>
+                            <div className="flex-1 h-px bg-gray-200" />
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-6">
+                            {group.visible.map(session => (
+                                <SessionCard
+                                    key={session.sessionId}
+                                    session={session}
+                                    assets={getSessionAssets(session)}
+                                    onUpdateStatus={(status) => handleSessionStatusChange(session, status)}
+                                    onDeleteSession={() => {
+                                        if (confirm('이 차시를 영구 삭제하시겠습니까? 소속된 모든 지문도 함께 삭제됩니다.')) {
+                                            deleteLearningSession(session.sessionId);
+                                        }
+                                    }}
+                                    onOpenAssetDetail={setSelectedAsset}
+                                />
+                            ))}
+                        </div>
+                    </section>
+                ))
+            )}
 
             {/* 문항 상세 보기 모달 */}
             {selectedAsset && (

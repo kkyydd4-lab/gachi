@@ -26,25 +26,95 @@
 
 /* --- A4 용지 ---
    화면 padding과 인쇄 @page margin을 같은 값(14/14/12mm)으로 맞춰야
-   미리보기와 실제 출력의 줄바꿈 위치가 일치한다. 한쪽만 바꾸지 말 것. */
+   미리보기와 실제 출력이 일치한다. 한쪽만 바꾸지 말 것.
+
+   내용은 PrintView가 실제 높이를 재서 쪽 단위로 미리 나눠 담는다.
+   따라서 .sheet 는 정확히 A4 한 쪽이며 넘치는 일이 없다. */
 .sheet {
+  position: relative;
   width: 210mm;
-  min-height: 297mm;
+  height: 297mm;
   margin: 0 auto 24px;
   padding: 14mm 14mm 12mm;
   background-color: #fff;
   box-shadow: 0 4px 24px rgba(0, 0, 0, .28);
   box-sizing: border-box;
-
-  /* 297mm마다 페이지 경계선을 그린다.
-     내용이 한 장에 들어가면 선이 용지 맨 아래 끝에 겹쳐 보이지 않고,
-     넘칠 때만 "여기서 다음 장으로 넘어갑니다" 표시로 나타난다. */
-  background-image: repeating-linear-gradient(to bottom,
-      transparent 0,
-      transparent calc(297mm - 1px),
-      rgba(220, 38, 38, .5) calc(297mm - 1px),
-      rgba(220, 38, 38, .5) 297mm);
+  overflow: hidden;
 }
+
+/* 쪽 번호 — 아래 여백 안에 놓아 본문 높이를 잡아먹지 않게 한다 */
+.pr-page-no {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 4mm;
+  text-align: center;
+  font-size: 8.5pt;
+  color: var(--pr-sub);
+}
+
+/* 높이 측정용 — 화면에 보이지 않지만 실제 단 폭으로 렌더된다 */
+.pr-measure {
+  position: absolute;
+  left: -20000px;
+  top: 0;
+  width: 210mm;
+  padding: 0 14mm;
+  box-sizing: border-box;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.pr-measure .pr-cols { height: auto; }
+
+/* ⚠️ flow-root 필수.
+   감싸는 요소의 높이에는 자식의 바깥 여백(margin)이 포함되지 않는다.
+   문항마다 margin-bottom이 있으므로 이걸 빼먹으면 측정값이 실제보다 작아지고,
+   쪽 나눔이 어긋나 내용이 페이지 밖으로 잘린다. */
+.pr-measure [data-block] { display: flow-root; }
+
+.pr-warn {
+  max-width: 210mm;
+  margin: 0 auto 16px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.pr-divider {
+  width: 1px;
+  height: 18px;
+  background: rgba(255, 255, 255, .25);
+  margin: 0 4px;
+}
+
+/* 단 구성 — 1단 또는 2단(문제집식) */
+.pr-cols {
+  display: flex;
+  gap: 8mm;
+  height: 100%;
+}
+
+.pr-col {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 2단에서는 가운데 구분선을 넣어 실제 문제집처럼 보이게 한다 */
+.pr-cols.two .pr-col:first-child {
+  border-right: .8px solid var(--pr-line);
+  padding-right: 4mm;
+}
+
+/* 2단은 단폭이 좁으므로 들여쓰기와 글자를 조금 줄인다 */
+.pr-cols.two .pr-opts { margin-left: 6mm; font-size: 9.5pt; }
+.pr-cols.two .pr-q-context { margin-left: 6mm; font-size: 9.5pt; }
+.pr-cols.two .pr-q-head { font-size: 10pt; }
+.pr-cols.two .pr-passage-body { font-size: 10.5pt; line-height: 1.8; }
+.pr-cols.two .pr-passage { padding: 4mm 4.5mm; }
 
 /* --- 시험지 머리말 --- */
 .pr-head {
@@ -481,7 +551,8 @@
   body > #root > div > *:not(.print-root) { display: none !important; }
 
   .no-print,
-  .pr-toolbar { display: none !important; }
+  .pr-toolbar,
+  .pr-measure { display: none !important; }
 
   /* 개발 모드의 React Query 개발도구가 출력물에 섞이지 않도록 */
   .tsqd-parent-container { display: none !important; }
@@ -492,16 +563,25 @@
     min-height: auto !important;
   }
 
-  /* 화면에서 흰 종이로 보이던 .sheet가 인쇄에서는 실제 한 페이지가 된다 */
+  /* 내용은 이미 쪽 단위로 나뉘어 있으므로 .sheet 하나가 곧 한 페이지다.
+     여백은 @page margin이 담당하므로 padding은 없앤다. */
   .sheet {
     width: auto !important;
-    min-height: auto !important;
+    height: auto !important;
+    min-height: 0 !important;
     margin: 0 !important;
     padding: 0 !important;
     box-shadow: none !important;
-    background-image: none !important;  /* 화면용 페이지 경계선 제거 */
+    overflow: visible !important;
     break-after: page;
     page-break-after: always;
+  }
+
+  .pr-cols { height: auto !important; }
+
+  .pr-page-no {
+    position: static !important;
+    margin-top: 4mm;
   }
 
   /* 마지막 장 뒤에 빈 페이지가 생기지 않도록 */

@@ -35,7 +35,7 @@
   width: 210mm;
   height: 297mm;
   margin: 0 auto 24px;
-  padding: 14mm 14mm 12mm;
+  padding: 14mm 14mm 18mm;
   background-color: #fff;
   box-shadow: 0 4px 24px rgba(0, 0, 0, .28);
   box-sizing: border-box;
@@ -437,9 +437,13 @@
   border-bottom: 2px solid var(--pr-line-strong);
 }
 
-/* 지문 구간 꼬리말 */
+/* 쪽 꼬리말 — 본문 흐름 밖(아래 여백)에 고정한다.
+   흐름에 두면 꼬리말 하나 때문에 쪽이 하나 더 생긴다. */
 .pr-foot {
-  margin-top: 6mm;
+  position: absolute;
+  left: 14mm;
+  right: 14mm;
+  bottom: 9mm;
   padding-top: 2mm;
   border-top: 1px solid var(--pr-line);
   font-size: 8.5pt;
@@ -499,7 +503,7 @@
 /* .sheet의 화면 padding과 반드시 같은 값이어야 한다 (위 주석 참고) */
 @page {
   size: A4;
-  margin: 14mm 14mm 12mm;
+  margin: 14mm 14mm 18mm;
 }
 
 @media print {
@@ -549,9 +553,15 @@
     page-break-after: always;
   }
 
+  /* 인쇄에서는 @page margin이 여백을 담당하므로 좌우 기준을 0으로 되돌린다 */
+  .pr-foot {
+    left: 0 !important;
+    right: 0 !important;
+    bottom: -13mm !important;
+  }
+
   .pr-page-no {
-    position: static !important;
-    margin-top: 4mm;
+    bottom: -18mm !important;
   }
 
   /* 마지막 장 뒤에 빈 페이지가 생기지 않도록 */

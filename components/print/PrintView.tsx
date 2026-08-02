@@ -10,11 +10,12 @@ type PrintMode = 'paper' | 'answer' | 'key';
 const CIRCLED = ['①', '②', '③', '④', '⑤'] as const;
 
 // A4 기준 치수 (mm). .sheet 의 padding, @page margin과 반드시 일치해야 한다.
-const COL_HEIGHT_MM = 297 - 14 - 12;
+// 아래 여백에는 꼬리말과 쪽 번호가 들어간다 (본문 흐름에서 빼서 쪽 밀림을 막음)
+const COL_HEIGHT_MM = 297 - 14 - 18;
 
 // 남는 공간을 블록 사이에 나눠 넣을 때의 한 칸 최대치.
 // 무제한으로 벌리면 문항이 페이지 전체에 흩뿌려져 오히려 읽기 나빠진다.
-const MAX_EXTRA_GAP_MM = 14;
+const MAX_EXTRA_GAP_MM = 20;
 
 const GRADE_TIME_LIMITS: Record<GradeGroupType, number> = {
     '초등 저학년': 20,
@@ -31,6 +32,8 @@ interface NumberedQuestion extends Question {
 interface Block {
     key: string;
     node: React.ReactNode;
+    /** 문항 블록만 균형 배분 대상이다 (지문·머리말은 절대 뒤로 밀지 않는다) */
+    isQuestion?: boolean;
 }
 
 /**
@@ -110,18 +113,21 @@ const QuestionBlock: React.FC<{ q: NumberedQuestion }> = ({ q }) => {
  * 측정된 블록 높이를 바탕으로 쪽에 채워 넣는다.
  * 바깥 배열의 각 묶음은 새 쪽에서 시작한다.
  *
- * 앞쪽부터 꽉 채우면 마지막 쪽이 텅 비어 보이므로,
- * 묶음이 몇 쪽을 쓸지 먼저 계산한 뒤 그 쪽수에 고르게 나눠 담는다.
- * (예: 355mm짜리 지문 → 2쪽 필요 → 한 쪽에 약 178mm씩)
+ * 지문이 먼저 놓이고, 그 아래 남는 자리에 문항이 들어간 뒤 나머지가 다음 쪽으로 넘어간다.
+ *
+ * 다만 앞쪽만 꽉 채우면 뒤쪽이 30%대로 텅 비므로, **문항에 한해서만**
+ * 쪽당 목표 높이를 넘기면 미리 다음 쪽으로 넘겨 앞뒤 균형을 맞춘다.
+ * (지문·머리말까지 균형 대상에 넣었더니 지문이 통째로 다음 쪽에 밀려
+ *  첫 쪽이 텅 비는 문제가 있었다. 그래서 문항만 대상으로 한다.)
  */
 function paginate(
     groups: Block[][],
     pageHeight: number,
     heights: Map<string, number>,
-): string[][] {
-    const pages: string[][] = [];
+): { keys: string[]; group: number }[] {
+    const pages: { keys: string[]; group: number }[] = [];
 
-    for (const blocks of groups) {
+    groups.forEach((blocks, gi) => {
         const hs = blocks.map(b => heights.get(b.key) ?? 0);
         const total = hs.reduce((a, b) => a + b, 0);
         const pageCount = Math.max(1, Math.ceil(total / pageHeight));
@@ -129,31 +135,37 @@ function paginate(
 
         let page: string[] = [];
         let used = 0;
+        let questionsOnPage = 0;
         let madePages = 1;
 
-        for (let i = 0; i < blocks.length; i++) {
+        blocks.forEach((b, i) => {
             const h = hs[i];
-            const rest = hs.slice(i).reduce((a, b) => a + b, 0);
+            const rest = hs.slice(i).reduce((a, c) => a + c, 0);
             const pagesLeft = pageCount - madePages;
 
-            // 실제로 안 들어가는 경우
             const mustBreak = used > 0 && used + h > pageHeight;
-            // 목표치를 넘었고, 남은 내용이 남은 쪽에 충분히 들어가는 경우
-            const wantBreak = used > 0 && pagesLeft > 0
+            // 균형 배분: 문항이고, 이 쪽에 이미 문항이 하나 이상 있고,
+            // 목표치를 넘겼으며, 남은 내용이 남은 쪽에 들어갈 때만
+            const balanceBreak = !mustBreak
+                && b.isQuestion
+                && questionsOnPage >= 1
+                && pagesLeft > 0
                 && used + h > target
                 && rest <= pagesLeft * pageHeight;
 
-            if (mustBreak || wantBreak) {
-                pages.push(page);
+            if (mustBreak || balanceBreak) {
+                pages.push({ keys: page, group: gi });
                 page = [];
                 used = 0;
+                questionsOnPage = 0;
                 madePages += 1;
             }
-            page.push(blocks[i].key);
+            page.push(b.key);
             used += h;
-        }
-        pages.push(page);
-    }
+            if (b.isQuestion) questionsOnPage += 1;
+        });
+        pages.push({ keys: page, group: gi });
+    });
     return pages;
 }
 
@@ -300,17 +312,10 @@ const PrintView: React.FC<PrintViewProps> = ({ sessionIdProp }) => {
                     ),
                 });
                 sec.questions.forEach(q => {
-                    blocks.push({ key: `q-${q.no}`, node: <QuestionBlock q={q} /> });
+                    blocks.push({ key: `q-${q.no}`, node: <QuestionBlock q={q} />, isQuestion: true });
                 });
-                blocks.push({
-                    key: `${idx}-foot`,
-                    node: (
-                        <div className="pr-foot">
-                            <span>{session.title}</span>
-                            <span>지문 {idx + 1} / {sections.length}</span>
-                        </div>
-                    ),
-                });
+                // 꼬리말은 블록에 넣지 않는다 — 흐름에 있으면 그것 하나 때문에
+                // 쪽이 하나 더 생긴다. 쪽 아래 여백에 고정 배치한다.
                 return blocks;
             });
 
@@ -344,15 +349,6 @@ const PrintView: React.FC<PrintViewProps> = ({ sessionIdProp }) => {
                         </div>
                     ),
                 })),
-                {
-                    key: 'foot',
-                    node: (
-                        <div className="pr-foot">
-                            <span>{session.title} · 답안지</span>
-                            <span>총 {allQuestions.length}문항</span>
-                        </div>
-                    ),
-                },
             ];
             return [blocks];
         }
@@ -397,15 +393,6 @@ const PrintView: React.FC<PrintViewProps> = ({ sessionIdProp }) => {
                     </div>
                 ),
             })),
-            {
-                key: 'foot',
-                node: (
-                    <div className="pr-foot">
-                        <span>{session.title} · 정답 및 해설</span>
-                        <span>교사용 — 학생 배포 금지</span>
-                    </div>
-                ),
-            },
         ];
         return [blocks];
     }, [mode, sections, session, allQuestions, timeLimit]);
@@ -493,15 +480,15 @@ const PrintView: React.FC<PrintViewProps> = ({ sessionIdProp }) => {
 
             {/* 실제 쪽 — 남는 공간은 블록 사이에 나눠 넣어 아래가 텅 비지 않게 한다 */}
             {pages?.map((page, pi) => {
-                const used = page.reduce((s, k) => s + (heights?.get(k) ?? 0), 0);
-                const gaps = Math.max(0, page.length - 1);
+                const used = page.keys.reduce((s, k) => s + (heights?.get(k) ?? 0), 0);
+                const gaps = Math.max(0, page.keys.length - 1);
                 const extra = gaps > 0
                     ? Math.max(0, Math.min((COL_HEIGHT_MM - used) / gaps, MAX_EXTRA_GAP_MM))
                     : 0;
 
                 return (
                     <div className="sheet" key={pi}>
-                        {page.map((k, bi) => (
+                        {page.keys.map((k, bi) => (
                             <div
                                 className="pr-block"
                                 key={k}
@@ -510,6 +497,13 @@ const PrintView: React.FC<PrintViewProps> = ({ sessionIdProp }) => {
                                 {nodeByKey.get(k)}
                             </div>
                         ))}
+                        <div className="pr-foot">
+                            <span>{session.title}</span>
+                            {mode === 'paper' && sections.length > 0 && (
+                                <span>지문 {page.group + 1} / {sections.length}</span>
+                            )}
+                            {mode !== 'paper' && <span>{docTitle}</span>}
+                        </div>
                         <div className="pr-page-no">{pi + 1} / {pages.length}</div>
                     </div>
                 );

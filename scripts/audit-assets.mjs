@@ -90,8 +90,12 @@ async function main() {
       add('warn', a, `지문이 짧음 (${content.length}자 < 권장 ${min}자)`);
     if (/<\/?(u|b|i|strong|em|span|div|br)\b/i.test(content))
       add('warn', a, 'HTML 태그가 지문에 포함됨 (프롬프트상 금지)');
-    // ㉠~㉭ 마커가 [밑줄:...] 형식 없이 단독으로 쓰였는지
-    const loneMarkers = content.match(/[㉠-㉭](?!\s*\[)/g);
+    // ㉠~㉭ 마커가 [밑줄:...] 형식 없이 단독으로 쓰였는지.
+    // 단, 빈칸 표기 "(  ㉮  )"는 정상이므로 먼저 걷어낸다 — 안 그러면 오탐이 난다.
+    // (renderPassageContent가 인식하는 형식이며, import-assets.mjs의 검증과 규칙을 맞춘 것)
+    const loneMarkers = content
+      .replace(/\(\s{2}[㉠-㉯]\s{2}\)/g, '')
+      .match(/[㉠-㉭](?!\s*\[)/g);
     if (loneMarkers) add('warn', a, `표식 마커가 단독 사용됨 (${loneMarkers.length}개) — ㉠[밑줄:대상] 형식이어야 함`);
 
     const qs = Array.isArray(a.questions) ? a.questions : [];

@@ -34,10 +34,10 @@ interface Block {
  * 화면용(utils/renderPassageContent)은 색상 위주라 흑백 인쇄에서 구분이 사라지므로,
  * 인쇄에서는 밑줄·테두리 같은 형태로만 표현한다. 인식하는 문법은 동일하다.
  */
-const renderPrintPassage = (content: string): React.ReactNode[] => {
+const renderInline = (text: string): React.ReactNode[] => {
     const pattern = /(\[밑줄:.*?\]|\[문장밑줄:.*?\]|\[빈칸\]|[㉠-㉯]|[ⓐ-ⓔ]|\(   \)|\(  [ㄱ-ㅎ]  \)|\(  [㉠-㉯]  \))/g;
 
-    return content.split(pattern).map((part, i) => {
+    return text.split(pattern).map((part, i) => {
         if (part.startsWith('[밑줄:')) {
             return <span key={i} className="pr-underline">{part.match(/\[밑줄:(.*?)\]/)?.[1]}</span>;
         }
@@ -57,18 +57,24 @@ const renderPrintPassage = (content: string): React.ReactNode[] => {
     });
 };
 
-/** 선택지 길이에 따라 배치 열 수를 정한다 (2단 조판에서는 항상 1열) */
-const optionColumns = (options: string[], cols: number): 1 | 2 | 5 => {
-    if (cols === 2) return 1;
+/** 지문을 문단 단위로 렌더링한다 (문단 사이 여백과 첫 줄 들여쓰기를 주기 위함) */
+const renderPrintPassage = (content: string): React.ReactNode[] =>
+    (content || '')
+        .split('\n')
+        .filter(p => p.trim())
+        .map((para, i) => <p className="pr-para" key={i}>{renderInline(para)}</p>);
+
+/** 선택지 길이에 따라 배치 열 수를 정한다 */
+const optionColumns = (options: string[]): 1 | 2 | 5 => {
     const longest = options.reduce((m, o) => Math.max(m, (o || '').length), 0);
     if (longest <= 6) return 5;
     if (longest <= 20) return 2;
     return 1;
 };
 
-const QuestionBlock: React.FC<{ q: NumberedQuestion; cols: number }> = ({ q, cols }) => {
+const QuestionBlock: React.FC<{ q: NumberedQuestion }> = ({ q }) => {
     const options = Array.isArray(q.options) ? q.options : [];
-    const oc = optionColumns(options, cols);
+    const oc = optionColumns(options);
 
     return (
         <div className="pr-q">
@@ -97,37 +103,29 @@ const QuestionBlock: React.FC<{ q: NumberedQuestion; cols: number }> = ({ q, col
 };
 
 /**
- * 측정된 블록 높이를 바탕으로 단·쪽에 채워 넣는다.
- * 반환값: pages[쪽][단] = 블록 key 목록
+ * 측정된 블록 높이를 바탕으로 쪽에 채워 넣는다.
+ * 바깥 배열의 각 묶음은 새 쪽에서 시작한다.
+ * 반환값: pages[쪽] = 블록 key 목록
  */
 function paginate(
     groups: Block[][],
-    colsPerPage: number,
-    colHeight: number,
+    pageHeight: number,
     heights: Map<string, number>,
-): string[][][] {
-    const pages: string[][][] = [];
+): string[][] {
+    const pages: string[][] = [];
 
     for (const blocks of groups) {
-        let page: string[][] = [[]];
-        let col = 0;
+        let page: string[] = [];
         let used = 0;
 
         for (const b of blocks) {
             const h = heights.get(b.key) ?? 0;
-            // 현재 단에 안 들어가면 다음 단, 단이 다 차면 다음 쪽
-            if (used > 0 && used + h > colHeight) {
-                col += 1;
-                if (col >= colsPerPage) {
-                    pages.push(page);
-                    page = [[]];
-                    col = 0;
-                } else {
-                    page.push([]);
-                }
+            if (used > 0 && used + h > pageHeight) {
+                pages.push(page);
+                page = [];
                 used = 0;
             }
-            page[col].push(b.key);
+            page.push(b.key);
             used += h;
         }
         pages.push(page);
@@ -146,7 +144,6 @@ const PrintView: React.FC<PrintViewProps> = ({ sessionIdProp }) => {
     const navigate = useNavigate();
 
     const [mode, setMode] = useState<PrintMode>('paper');
-    const [cols, setCols] = useState<1 | 2>(1);
     const [session, setSession] = useState<LearningSession | null>(null);
     const [assets, setAssets] = useState<Asset[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -274,13 +271,12 @@ const PrintView: React.FC<PrintViewProps> = ({ sessionIdProp }) => {
                     key: `${idx}-passage`,
                     node: (
                         <div className="pr-passage">
-                            <h2 className="pr-passage-title">{sec.asset.title}</h2>
                             <div className="pr-passage-body">{renderPrintPassage(sec.asset.content || '')}</div>
                         </div>
                     ),
                 });
                 sec.questions.forEach(q => {
-                    blocks.push({ key: `q-${q.no}`, node: <QuestionBlock q={q} cols={cols} /> });
+                    blocks.push({ key: `q-${q.no}`, node: <QuestionBlock q={q} /> });
                 });
                 blocks.push({
                     key: `${idx}-foot`,
@@ -294,9 +290,8 @@ const PrintView: React.FC<PrintViewProps> = ({ sessionIdProp }) => {
                 return blocks;
             });
 
-            // 1단: 지문마다 새 쪽에서 시작 (초등용 — 여유롭게 읽고 풀도록)
-            // 2단: 문제집처럼 단을 이어서 채운다 (빈 단이 생기지 않아 쪽수가 크게 준다)
-            return cols === 2 ? [perSection.flat()] : perSection;
+            // 지문마다 새 쪽에서 시작한다 (지문과 그 문항이 흩어지지 않도록)
+            return perSection;
         }
 
         if (mode === 'answer') {
@@ -389,14 +384,14 @@ const PrintView: React.FC<PrintViewProps> = ({ sessionIdProp }) => {
             },
         ];
         return [blocks];
-    }, [mode, cols, sections, session, allQuestions, timeLimit]);
+    }, [mode, sections, session, allQuestions, timeLimit]);
 
     const flatBlocks = useMemo(() => groups.flat(), [groups]);
 
     // 숨긴 영역에서 실제 렌더 높이를 잰다. 단 폭이 바뀌면 다시 잰다.
     useLayoutEffect(() => {
         setHeights(null);
-    }, [mode, cols, assets.length]);
+    }, [mode, assets.length]);
 
     useLayoutEffect(() => {
         if (heights !== null || flatBlocks.length === 0) return;
@@ -412,10 +407,10 @@ const PrintView: React.FC<PrintViewProps> = ({ sessionIdProp }) => {
 
     const pages = useMemo(() => {
         if (!heights) return null;
-        return paginate(groups, cols, COL_HEIGHT_MM, heights);
-    }, [heights, groups, cols]);
+        return paginate(groups, COL_HEIGHT_MM, heights);
+    }, [heights, groups]);
 
-    // 한 블록이 단 하나보다 큰 경우 (지문이 지나치게 길 때) 알린다
+    // 한 블록이 한 쪽보다 큰 경우 (지문이 지나치게 길 때) 알린다
     const oversized = useMemo(() => {
         if (!heights) return [];
         return flatBlocks
@@ -451,9 +446,6 @@ const PrintView: React.FC<PrintViewProps> = ({ sessionIdProp }) => {
                 <button className={`pr-tab ${mode === 'paper' ? 'active' : ''}`} onClick={() => setMode('paper')}>문제지</button>
                 <button className={`pr-tab ${mode === 'answer' ? 'active' : ''}`} onClick={() => setMode('answer')}>답안지</button>
                 <button className={`pr-tab ${mode === 'key' ? 'active' : ''}`} onClick={() => setMode('key')}>정답·해설</button>
-                <span className="pr-divider" />
-                <button className={`pr-tab ${cols === 1 ? 'active' : ''}`} onClick={() => setCols(1)}>1단</button>
-                <button className={`pr-tab ${cols === 2 ? 'active' : ''}`} onClick={() => setCols(2)}>2단</button>
                 <span className="pr-hint">
                     {pages ? `${pages.length}쪽` : '쪽 계산 중...'} · 인쇄 시 용지 A4 · 배율 100% · 여백 '기본'
                 </span>
@@ -462,37 +454,25 @@ const PrintView: React.FC<PrintViewProps> = ({ sessionIdProp }) => {
 
             {oversized.length > 0 && (
                 <div className="pr-warn no-print">
-                    ⚠️ 한 단에 담기지 않는 내용이 {oversized.length}개 있습니다.
-                    {cols === 2 ? ' 1단으로 바꾸거나' : ''} 해당 지문을 줄여주세요.
+                    ⚠️ 한 쪽에 담기지 않는 내용이 {oversized.length}개 있습니다. 해당 지문을 줄여주세요.
                 </div>
             )}
 
             {/* 높이 측정용 (화면에 보이지 않음) */}
             {heights === null && (
                 <div className="pr-measure" ref={measureRef} aria-hidden>
-                    <div className={`pr-cols ${cols === 2 ? 'two' : ''}`}>
-                        <div className="pr-col">
-                            {flatBlocks.map(b => (
-                                <div data-block={b.key} key={b.key}>{b.node}</div>
-                            ))}
-                        </div>
-                        {cols === 2 && <div className="pr-col" />}
-                    </div>
+                    {flatBlocks.map(b => (
+                        <div data-block={b.key} key={b.key}>{b.node}</div>
+                    ))}
                 </div>
             )}
 
             {/* 실제 쪽 */}
             {pages?.map((page, pi) => (
                 <div className="sheet" key={pi}>
-                    <div className={`pr-cols ${cols === 2 ? 'two' : ''}`}>
-                        {Array.from({ length: cols }).map((_, ci) => (
-                            <div className="pr-col" key={ci}>
-                                {(page[ci] || []).map(k => (
-                                    <React.Fragment key={k}>{nodeByKey.get(k)}</React.Fragment>
-                                ))}
-                            </div>
-                        ))}
-                    </div>
+                    {page.map(k => (
+                        <React.Fragment key={k}>{nodeByKey.get(k)}</React.Fragment>
+                    ))}
                     <div className="pr-page-no">{pi + 1} / {pages.length}</div>
                 </div>
             ))}

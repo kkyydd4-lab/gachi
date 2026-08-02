@@ -926,6 +926,50 @@ export const LearningSessionService = {
     }
   },
 
+  /**
+   * 학년군의 차시 번호를 다시 매긴다.
+   *
+   * 규칙 — "차시 번호는 승인된 차시만 갖는다":
+   *   APPROVED → "{학년군} N차시"      (생성일 순 1부터, 항상 연속)
+   *   DRAFT    → "{학년군} 검토대기 N"
+   *   ARCHIVED → "{학년군} 반려 N"
+   *
+   * 반려하면 그 번호를 즉시 반납하므로 승인된 차시의 번호가 비거나 꼬이지 않는다.
+   * 승인/반려/삭제 직후에 호출한다. (scripts/renumber-sessions.mjs와 규칙을 맞출 것)
+   */
+  async renumberByGrade(gradeGroup: GradeGroupType): Promise<void> {
+    try {
+      const q = query(collection(db, LEARNING_SESSIONS_COLLECTION), where('gradeGroup', '==', gradeGroup));
+      const snapshot = await getDocs(q);
+      const list = snapshot.docs.map(d => d.data() as LearningSession);
+      const byDate = (a: LearningSession, b: LearningSession) =>
+        String(a.createdAt).localeCompare(String(b.createdAt));
+
+      const desired = new Map<string, string>();
+      const label: Record<LearningSessionStatus, (i: number) => string> = {
+        APPROVED: i => `${gradeGroup} ${i + 1}차시`,
+        DRAFT: i => `${gradeGroup} 검토대기 ${i + 1}`,
+        ARCHIVED: i => `${gradeGroup} 반려 ${i + 1}`,
+      };
+      (['APPROVED', 'DRAFT', 'ARCHIVED'] as LearningSessionStatus[]).forEach(st => {
+        list.filter(s => s.status === st).sort(byDate)
+          .forEach((s, i) => desired.set(s.sessionId, label[st](i)));
+      });
+
+      // 실제로 바뀌는 것만 쓴다 (불필요한 쓰기 방지)
+      await Promise.all(
+        list
+          .filter(s => desired.get(s.sessionId) !== s.title)
+          .map(s => updateDoc(doc(db, LEARNING_SESSIONS_COLLECTION, s.sessionId), {
+            title: desired.get(s.sessionId),
+          }))
+      );
+    } catch (error) {
+      // 번호 정리는 부가 작업이므로, 실패해도 원래 동작(승인·반려·삭제)은 유지한다
+      console.error('Renumber learning sessions error:', error);
+    }
+  },
+
   async updateSessionStatus(sessionId: string, status: LearningSessionStatus): Promise<void> {
     try {
       await updateDoc(doc(db, LEARNING_SESSIONS_COLLECTION, sessionId), { status });

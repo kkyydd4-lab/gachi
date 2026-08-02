@@ -180,8 +180,14 @@ export const useLearningSessions = () => {
 export const useUpdateLearningSessionStatus = () => {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: ({ sessionId, status }: { sessionId: string; status: LearningSessionStatus }) =>
-            LearningSessionService.updateSessionStatus(sessionId, status),
+        mutationFn: async ({ sessionId, status }: { sessionId: string; status: LearningSessionStatus }) => {
+            await LearningSessionService.updateSessionStatus(sessionId, status);
+            // 상태가 바뀌면 번호를 다시 매긴다 — 반려한 차시가 번호를 물고 있으면
+            // 승인된 차시 번호에 구멍이 생겨 제목이 꼬인다.
+            const sessions = await LearningSessionService.getAllSessions();
+            const grade = sessions.find(s => s.sessionId === sessionId)?.gradeGroup;
+            if (grade) await LearningSessionService.renumberByGrade(grade);
+        },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: QUERY_KEYS.learningSessions });
             queryClient.invalidateQueries({ queryKey: QUERY_KEYS.assets });
@@ -204,6 +210,8 @@ export const useDeleteLearningSession = () => {
             }
             // Delete session itself
             await LearningSessionService.deleteSession(sessionId);
+            // 삭제로 비어 버린 번호를 메운다
+            if (session?.gradeGroup) await LearningSessionService.renumberByGrade(session.gradeGroup);
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: QUERY_KEYS.learningSessions });

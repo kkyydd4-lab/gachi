@@ -5,11 +5,20 @@ import { Asset, AdminConfig, GradeGroupType, LearningSession, LearningSessionSta
 // 차시 목록 표시 순서 (학년군 → 차시 번호)
 const GRADE_ORDER: GradeGroupType[] = ['초등 저학년', '초등 중학년', '초등 고학년', '중등'];
 
-// "초등 중학년 3차시" → 3. 번호가 없으면 맨 뒤로 보낸다.
+// 차시 번호는 승인된 차시만 갖는다 (services/api.ts renumberByGrade 참고).
+// 목록은 승인 → 검토대기 → 반려 순으로 묶고, 같은 묶음 안에서는 번호순으로 놓는다.
+const STATUS_RANK: Record<LearningSessionStatus, number> = { APPROVED: 0, DRAFT: 1, ARCHIVED: 2 };
+
+// "초등 중학년 3차시" → 3, "초등 저학년 반려 1" → 1. 번호가 없으면 맨 뒤로.
 const sessionNo = (title: string): number => {
-    const m = /(\d+)\s*차시/.exec(title || '');
+    const m = /(\d+)\s*차시/.exec(title || '') || /(\d+)\s*$/.exec(title || '');
     return m ? parseInt(m[1], 10) : Number.MAX_SAFE_INTEGER;
 };
+
+const compareSessions = (a: LearningSession, b: LearningSession): number =>
+    (STATUS_RANK[a.status] ?? 9) - (STATUS_RANK[b.status] ?? 9) ||
+    sessionNo(a.title) - sessionNo(b.title) ||
+    String(a.createdAt).localeCompare(String(b.createdAt));
 
 interface ReviewTabProps {
     config: AdminConfig;
@@ -53,12 +62,7 @@ const ReviewTab: React.FC<ReviewTabProps> = ({
             .filter(grade => gradeFilter === 'ALL' || gradeFilter === grade)
             .map(grade => {
                 const all = learningSessions.filter(s => s.gradeGroup === grade);
-                const visible = all
-                    .filter(matchesStatus)
-                    .sort((a, b) =>
-                        sessionNo(a.title) - sessionNo(b.title) ||
-                        String(a.createdAt).localeCompare(String(b.createdAt))
-                    );
+                const visible = all.filter(matchesStatus).sort(compareSessions);
                 return {
                     grade,
                     visible,

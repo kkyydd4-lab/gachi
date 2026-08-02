@@ -13,9 +13,6 @@ const CIRCLED = ['①', '②', '③', '④', '⑤'] as const;
 // 아래 여백에는 꼬리말과 쪽 번호가 들어간다 (본문 흐름에서 빼서 쪽 밀림을 막음)
 const COL_HEIGHT_MM = 297 - 14 - 18;
 
-// 남는 공간을 블록 사이에 나눠 넣을 때의 한 칸 최대치.
-// 무제한으로 벌리면 문항이 페이지 전체에 흩뿌려져 오히려 읽기 나빠진다.
-const MAX_EXTRA_GAP_MM = 20;
 
 const GRADE_TIME_LIMITS: Record<GradeGroupType, number> = {
     '초등 저학년': 20,
@@ -113,12 +110,11 @@ const QuestionBlock: React.FC<{ q: NumberedQuestion }> = ({ q }) => {
  * 측정된 블록 높이를 바탕으로 쪽에 채워 넣는다.
  * 바깥 배열의 각 묶음은 새 쪽에서 시작한다.
  *
- * 지문이 먼저 놓이고, 그 아래 남는 자리에 문항이 들어간 뒤 나머지가 다음 쪽으로 넘어간다.
+ * 위에서부터 들어가는 만큼 채우고, 안 들어가는 블록만 다음 쪽으로 넘긴다.
  *
- * 다만 앞쪽만 꽉 채우면 뒤쪽이 30%대로 텅 비므로, **문항에 한해서만**
- * 쪽당 목표 높이를 넘기면 미리 다음 쪽으로 넘겨 앞뒤 균형을 맞춘다.
- * (지문·머리말까지 균형 대상에 넣었더니 지문이 통째로 다음 쪽에 밀려
- *  첫 쪽이 텅 비는 문제가 있었다. 그래서 문항만 대상으로 한다.)
+ * 쪽마다 목표 높이를 두고 균형을 맞춰 보기도 했으나,
+ * 내용이 조금만 넘쳐도 두 쪽이 58% / 50% 처럼 어중간하게 갈려 오히려 지저분했다.
+ * 남는 공간을 문항 사이에 나눠 넣는 방식도 간격이 들쭉날쭉해져 걷어냈다.
  */
 function paginate(
     groups: Block[][],
@@ -128,42 +124,19 @@ function paginate(
     const pages: { keys: string[]; group: number }[] = [];
 
     groups.forEach((blocks, gi) => {
-        const hs = blocks.map(b => heights.get(b.key) ?? 0);
-        const total = hs.reduce((a, b) => a + b, 0);
-        const pageCount = Math.max(1, Math.ceil(total / pageHeight));
-        const target = total / pageCount;
-
         let page: string[] = [];
         let used = 0;
-        let questionsOnPage = 0;
-        let madePages = 1;
 
-        blocks.forEach((b, i) => {
-            const h = hs[i];
-            const rest = hs.slice(i).reduce((a, c) => a + c, 0);
-            const pagesLeft = pageCount - madePages;
-
-            const mustBreak = used > 0 && used + h > pageHeight;
-            // 균형 배분: 문항이고, 이 쪽에 이미 문항이 하나 이상 있고,
-            // 목표치를 넘겼으며, 남은 내용이 남은 쪽에 들어갈 때만
-            const balanceBreak = !mustBreak
-                && b.isQuestion
-                && questionsOnPage >= 1
-                && pagesLeft > 0
-                && used + h > target
-                && rest <= pagesLeft * pageHeight;
-
-            if (mustBreak || balanceBreak) {
+        for (const b of blocks) {
+            const h = heights.get(b.key) ?? 0;
+            if (used > 0 && used + h > pageHeight) {
                 pages.push({ keys: page, group: gi });
                 page = [];
                 used = 0;
-                questionsOnPage = 0;
-                madePages += 1;
             }
             page.push(b.key);
             used += h;
-            if (b.isQuestion) questionsOnPage += 1;
-        });
+        }
         pages.push({ keys: page, group: gi });
     });
     return pages;
@@ -303,22 +276,21 @@ const PrintView: React.FC<PrintViewProps> = ({ sessionIdProp }) => {
                         ),
                     });
                 }
-                blocks.push({
-                    key: `${idx}-label`,
-                    node: (
-                        <div className="pr-section-label">
-                            <span className="range">[{range}]</span>
-                            다음 글을 읽고 물음에 답하시오.
-                            <span className="pr-subject">· {sec.asset.subject}</span>
-                        </div>
-                    ),
-                });
+                // 문항 범위 안내와 지문은 한 덩어리로 둔다.
+                // 따로 두면 안내만 쪽 맨 아래에 남고 지문이 다음 쪽으로 넘어간다.
                 blocks.push({
                     key: `${idx}-passage`,
                     node: (
-                        <div className="pr-passage">
-                            <div className="pr-passage-body">{renderPrintPassage(sec.asset.content || '')}</div>
-                        </div>
+                        <>
+                            <div className="pr-section-label">
+                                <span className="range">[{range}]</span>
+                                다음 글을 읽고 물음에 답하시오.
+                                <span className="pr-subject">· {sec.asset.subject}</span>
+                            </div>
+                            <div className="pr-passage">
+                                <div className="pr-passage-body">{renderPrintPassage(sec.asset.content || '')}</div>
+                            </div>
+                        </>
                     ),
                 });
                 sec.questions.forEach(q => {
@@ -329,8 +301,10 @@ const PrintView: React.FC<PrintViewProps> = ({ sessionIdProp }) => {
                 return blocks;
             });
 
-            // 지문마다 새 쪽에서 시작한다 (지문과 그 문항이 흩어지지 않도록)
-            return perSection;
+            // 지문마다 새 쪽에서 시작하게 하면, 조금만 넘쳐도 뒤쪽이 텅 빈 채로 남는다.
+            // (초등 저학년 1차시가 58% + 50% 두 쪽으로 쪼개지던 문제)
+            // 문제집처럼 위에서부터 이어서 채우고, 지문 상자는 통째로만 넘어가게 둔다.
+            return [perSection.flat()];
         }
 
         if (mode === 'answer') {
@@ -488,31 +462,21 @@ const PrintView: React.FC<PrintViewProps> = ({ sessionIdProp }) => {
                 </div>
             )}
 
-            {/* 실제 쪽 — 남는 공간은 블록 사이에 나눠 넣어 아래가 텅 비지 않게 한다 */}
+            {/* 실제 쪽 — 블록은 위에서부터 자연스럽게 쌓는다.
+                남는 공간을 문항 사이에 억지로 나눠 넣으면 간격이 들쭉날쭉해 오히려 지저분하다. */}
             {pages?.map((page, pi) => {
-                const used = page.keys.reduce((s, k) => s + (heights?.get(k) ?? 0), 0);
-                const gaps = Math.max(0, page.keys.length - 1);
-                const extra = gaps > 0
-                    ? Math.max(0, Math.min((COL_HEIGHT_MM - used) / gaps, MAX_EXTRA_GAP_MM))
-                    : 0;
-
                 return (
                     <div className="sheet" key={pi}>
-                        {page.keys.map((k, bi) => (
-                            <div
-                                className="pr-block"
-                                key={k}
-                                style={bi < gaps ? { marginBottom: `${extra.toFixed(2)}mm` } : undefined}
-                            >
+                        {page.keys.map(k => (
+                            <div className="pr-block" key={k}>
                                 {nodeByKey.get(k)}
                             </div>
                         ))}
+                        {/* 이어서 채우므로 한 쪽에 두 지문이 걸칠 수 있다.
+                            "지문 N / M" 표기는 쪽과 맞지 않아 없앴다. */}
                         <div className="pr-foot">
                             <span>{session.title}</span>
-                            {mode === 'paper' && sections.length > 0 && (
-                                <span>지문 {page.group + 1} / {sections.length}</span>
-                            )}
-                            {mode !== 'paper' && <span>{docTitle}</span>}
+                            <span>{docTitle}</span>
                         </div>
                         <div className="pr-page-no">{pi + 1} / {pages.length}</div>
                     </div>

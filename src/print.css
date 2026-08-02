@@ -35,7 +35,7 @@
   width: 210mm;
   height: 297mm;
   margin: 0 auto 24px;
-  padding: 14mm 14mm 18mm;
+  padding: 14mm 14mm 12mm;
   background-color: #fff;
   box-shadow: 0 4px 24px rgba(0, 0, 0, .28);
   box-sizing: border-box;
@@ -43,16 +43,6 @@
 }
 
 /* 쪽 번호 — 아래 여백 안에 놓아 본문 높이를 잡아먹지 않게 한다 */
-.pr-page-no {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 4mm;
-  text-align: center;
-  font-size: 8.5pt;
-  color: var(--pr-sub);
-}
-
 /* 높이 측정용 — 화면에 보이지 않지만 실제 단 폭으로 렌더된다 */
 .pr-measure {
   position: absolute;
@@ -437,20 +427,26 @@
   border-bottom: 2px solid var(--pr-line-strong);
 }
 
-/* 쪽 꼬리말 — 본문 흐름 밖(아래 여백)에 고정한다.
-   흐름에 두면 꼬리말 하나 때문에 쪽이 하나 더 생긴다. */
+/* 쪽 꼬리말 — 본문 흐름 밖에서 쪽 맨 아래에 고정한다.
+   흐름에 두면 꼬리말 하나 때문에 쪽이 하나 더 생기고,
+   내용 바로 밑에 붙어 쪽마다 위치가 달라진다. */
 .pr-foot {
   position: absolute;
   left: 14mm;
   right: 14mm;
-  bottom: 9mm;
+  bottom: 5mm;
   padding-top: 2mm;
   border-top: 1px solid var(--pr-line);
   font-size: 8.5pt;
   color: var(--pr-sub);
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: baseline;
 }
+
+.pr-foot-left { text-align: left; }
+.pr-foot-page { text-align: center; font-weight: 700; }
+.pr-foot-right { text-align: right; }
 
 /* --- 화면 전용 도구 모음 --- */
 .pr-toolbar {
@@ -503,7 +499,7 @@
 /* .sheet의 화면 padding과 반드시 같은 값이어야 한다 (위 주석 참고) */
 @page {
   size: A4;
-  margin: 14mm 14mm 18mm;
+  margin: 14mm 14mm 12mm;
 }
 
 @media print {
@@ -540,28 +536,30 @@
   }
 
   /* 내용은 이미 쪽 단위로 나뉘어 있으므로 .sheet 하나가 곧 한 페이지다.
-     여백은 @page margin이 담당하므로 padding은 없앤다. */
+     좌우 여백은 @page margin이 담당하므로 padding은 없앤다.
+
+     ⚠️ height 를 auto 로 두면 안 된다.
+        용지 높이가 내용 높이로 줄어들어, 아래에 붙여 둔 꼬리말이
+        쪽 맨 아래가 아니라 내용 바로 밑에 찍힌다.
+        인쇄 가능한 높이(297 - 14 - 12 = 271mm)로 고정한다. */
   .sheet {
     width: auto !important;
-    height: auto !important;
+    height: 271mm !important;
     min-height: 0 !important;
     margin: 0 !important;
     padding: 0 !important;
     box-shadow: none !important;
-    overflow: visible !important;
+    overflow: hidden !important;
     break-after: page;
     page-break-after: always;
   }
 
-  /* 인쇄에서는 @page margin이 여백을 담당하므로 좌우 기준을 0으로 되돌린다 */
+  /* 좌우 여백은 @page margin이 담당하므로 기준을 0으로 되돌리고,
+     꼬리말은 고정된 용지 높이의 맨 아래에 붙인다 */
   .pr-foot {
     left: 0 !important;
     right: 0 !important;
-    bottom: -13mm !important;
-  }
-
-  .pr-page-no {
-    bottom: -18mm !important;
+    bottom: 0 !important;
   }
 
   /* 마지막 장 뒤에 빈 페이지가 생기지 않도록 */

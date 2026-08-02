@@ -10,8 +10,11 @@ type PrintMode = 'paper' | 'answer' | 'key';
 const CIRCLED = ['①', '②', '③', '④', '⑤'] as const;
 
 // A4 기준 치수 (mm). .sheet 의 padding, @page margin과 반드시 일치해야 한다.
-// 아래 여백에는 꼬리말과 쪽 번호가 들어간다 (본문 흐름에서 빼서 쪽 밀림을 막음)
-const COL_HEIGHT_MM = 297 - 14 - 18;
+// 인쇄 가능한 높이 = A4 297mm - @page 위아래 여백(14/12mm).
+// 그중 아래 12mm는 꼬리말(차시명·쪽번호) 자리로 비워 둔다.
+const PAGE_HEIGHT_MM = 297 - 14 - 12;
+const FOOTER_RESERVE_MM = 12;
+const COL_HEIGHT_MM = PAGE_HEIGHT_MM - FOOTER_RESERVE_MM;
 
 
 const GRADE_TIME_LIMITS: Record<GradeGroupType, number> = {
@@ -472,13 +475,13 @@ const PrintView: React.FC<PrintViewProps> = ({ sessionIdProp }) => {
                                 {nodeByKey.get(k)}
                             </div>
                         ))}
-                        {/* 이어서 채우므로 한 쪽에 두 지문이 걸칠 수 있다.
-                            "지문 N / M" 표기는 쪽과 맞지 않아 없앴다. */}
+                        {/* 꼬리말은 본문 흐름 밖에서 쪽 맨 아래에 고정된다.
+                            이어서 채우므로 한 쪽에 두 지문이 걸칠 수 있어 "지문 N / M" 표기는 없앴다. */}
                         <div className="pr-foot">
-                            <span>{session.title}</span>
-                            <span>{docTitle}</span>
+                            <span className="pr-foot-left">{session.title}</span>
+                            <span className="pr-foot-page">{pi + 1} / {pages.length}</span>
+                            <span className="pr-foot-right">{docTitle}</span>
                         </div>
-                        <div className="pr-page-no">{pi + 1} / {pages.length}</div>
                     </div>
                 );
             })}
